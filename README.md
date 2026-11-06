@@ -18,46 +18,68 @@ This repo stays surgical: design docs live in [`nearpay-brain`](../nearpay-brain
 - `nearpay-brain/lld/checkout-and-js.md` — **low-level design (dev-ready; implement from this)**
 - `nearpay-brain/lld/audits/checkout-and-js.md` — audit findings already folded into the LLD
 - `nearpay-brain/roadmap/development-plan.md` — stage and step this repo is built in
-- `nearpay-brain/architecture/hld.md` — system design
-- `nearpay-brain/architecture/repositories.md` — repo topology and dependency rules
 - `nearpay-brain/decisions/ADR-0010-checkout-isolation.md`
 - `nearpay-brain/architecture/flows.md#2-checkout--cross-chain-any-asset-the-main-path`
 
-## Layout
+## Routes
+
+| Path | What |
+|---|---|
+| `/c/:cs_id#<client_secret>` | hosted checkout (never framed) |
+| `/embed/:cs_id#<client_secret>` | embedded checkout, framed by `nearpay-js`; accepts `np:init` only from `allowed_origins` |
+| `/l/:id`, `/i/:id` | payment links (Stage 2) and hosted invoices (Stage 3): "not available yet" |
+
+The client secret stays in the URL fragment and in memory; it is sent only as `X-NearPay-Client-Secret`.
+
+## Build
 
 ```
-nearpay-checkout/
-├── public/
-├── src/
-│   ├── features/
-│   │   ├── asset-picker/
-│   │   ├── deposit-instructions/
-│   │   ├── refund-address/
-│   │   ├── status-stream/
-│   │   └── wallet-connect/
-│   ├── lib/
-│   │   ├── api/
-│   │   └── integrity/
-│   ├── routes/
-│   │   ├── embed/
-│   │   ├── invoice/
-│   │   ├── payment-link/
-│   │   └── session/
-│   └── wallets/
-│       ├── evm/
-│       ├── near/
-│       └── solana/
-├── test/
-│   ├── e2e/
-│   └── unit/
-└── .github/
-    └── workflows/
+pnpm install
+pnpm build          # → dist/ (index.html + hashed assets/), served by nearpay-deploy's `pay` site
 ```
+
+Build-time constants (everything ends up in the public bundle — nothing secret):
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VITE_SENTINEL_KEYS` | — | JSON `[{kid, public_key}]`, the **pinned** sentinel keys |
+| `NP_SENTINEL_KEYS_FILE` | `../nearpay-deploy/.secrets/public/sentinel_keys.json` | file with the same JSON (written by `nearpay-deploy/scripts/seed.sh keys`); the build fails when no keys are found |
+| `VITE_API_ORIGIN` | `/api` | payer API + sentinel, same origin through the gateway |
+| `VITE_TURNSTILE_SITEKEY` | `1x00000000000000000000AA` | Cloudflare's always-pass test sitekey (pairs with the local stack's test secret) |
+| `VITE_NEAR_NETWORK` | `mainnet` | NEAR Connect network |
+| `VITE_NEAR_RPC_URL` | `https://free.rpc.fastnear.com` | NEAR view calls (storage registration, Verifier salt) |
+| `VITE_WALLETCONNECT_PROJECT_ID` | empty | reserved; WalletConnect is not wired yet |
+
+`index.html` carries the CSP as a meta tag (`frame-ancestors` comes from the static server per route).
+It contains the placeholder `{{NP_CSP_NONCE}}` (also in `<meta name="np-csp-nonce">`): the static
+server must replace it with a per-response nonce for NEAR Connect's sandboxed wallet frames to run.
+Until it does, the placeholder is an invalid CSP source (the policy stays strict) and NEAR wallets
+are shown as unavailable.
+
+## Tests
+
+```
+pnpm test           # unit (Vitest), shared @nearpay/spec test vectors
+pnpm coverage       # + coverage gate (90 % branches on the money-path and state modules)
+pnpm e2e            # vite build --mode e2e → dist-e2e/, then Playwright against an in-process mock
+pnpm verify         # typecheck + lint + coverage + build + e2e
+```
+
+The Playwright suite uses the system Chrome (`/usr/bin/google-chrome`, override with `NP_CHROME`).
+`test/e2e/support/mock-server.ts` serves `dist-e2e/` plus the payer routes and sentinel co-signing,
+validating every request and response with the spec schemas and signing attestations with the
+spec's test-vector key (pinned only in the e2e build).
 
 ## Status
 
-Scaffold only. Implementation starts in **Stage 1 (step 1.3)** (`nearpay-brain/roadmap/development-plan.md`).
+Stage 1 (step 1.3): hosted + embedded checkout, manual path, EVM (EIP-6963) and NEAR (NEAR Connect)
+wallets, Intents-balance signing (NEP-413 / ERC-191), sentinel verification, live status (SSE +
+polling), test mode. Payment links (Stage 2), hosted invoices (Stage 3), Solana wallets (Stage 4)
+and WalletConnect are not built yet.
 
 ## Built with
 
-Libraries are listed here as they are added (hackathon rule Q-005). Code and documentation are written with AI assistance (Claude) under human direction and review.
+Vite, React, TypeScript, zod + `@nearpay/spec`, `@noble/curves` / `@noble/hashes` (Ed25519, SHA-256,
+keccak), `canonicalize` (RFC 8785), `bs58`, `uqr` (QR codes), `@hot-labs/near-connect` (NEAR wallets,
+lazy-loaded), Cloudflare Turnstile (runtime script), Vitest, Playwright, Biome. Code and documentation
+are written with AI assistance (Claude) under human direction and review.
