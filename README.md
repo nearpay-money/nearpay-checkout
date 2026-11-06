@@ -2,19 +2,18 @@
 
 > Hosted checkout, payment links, hosted invoices and the embedded iframe app; wallet adapters; deposit instructions; live status.
 
-| | |
-|---|---|
-| Group | Frontends |
-| Kind | static SPA |
-| Ships as | pay.nearpay.money |
-| Owns | — (stateless) |
+|                                       |                        |
+| ------------------------------------- | ---------------------- |
+| Group                                 | Frontends              |
+| Kind                                  | static SPA             |
+| Ships as                              | pay.nearpay.money      |
+| Owns                                  | — (stateless)          |
 | Depends on (published artifacts only) | spec (public), gateway |
-| First built in | Stage 1 (step 1.3) |
+| First built in                        | Stage 1 (step 1.3)     |
 
 ## Documentation
 
 This repo stays surgical: design docs live in [`nearpay-brain`](../nearpay-brain/README.md), not here.
-
 - `nearpay-brain/lld/checkout-and-js.md` — **low-level design (dev-ready; implement from this)**
 - `nearpay-brain/lld/audits/checkout-and-js.md` — audit findings already folded into the LLD
 - `nearpay-brain/roadmap/development-plan.md` — stage and step this repo is built in

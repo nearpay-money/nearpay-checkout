@@ -1,0 +1,54 @@
+{
+  "name": "nearpay-checkout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NearPay checkout: hosted and embedded payer pages, wallet adapters, deposit instructions, sentinel verification, live status.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.11.0 <23"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "build": "vite build",
+    "build:e2e": "vite build --mode e2e",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "e2e": "pnpm build:e2e && playwright test",
+    "verify": "pnpm typecheck && pnpm lint && pnpm coverage && pnpm build && pnpm e2e"
+  },
+  "dependencies": {
+    "@hot-labs/near-connect": "0.11.4",
+    "@nearpay/spec": "0.1.4",
+    "@noble/curves": "2.4.0",
+    "@noble/hashes": "2.4.0",
+    "bs58": "6.0.0",
+    "canonicalize": "5.1.0",
+    "react": "19.1.10",
+    "react-dom": "19.1.10",
+    "uqr": "0.1.3",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.2",
+    "@playwright/test": "1.64.1",
+    "@types/node": "22.20.5",
+    "@types/react": "19.1.17",
+    "@types/react-dom": "19.1.11",
+    "@vitest/coverage-v8": "2.1.9",
+    "typescript": "5.9.3",
+    "vite": "5.4.21",
+    "vitest": "2.1.9"
+  },
+  "pnpm": {
+    "overrides": {
+      "@nearpay/spec": "0.1.4"
+    },
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}
