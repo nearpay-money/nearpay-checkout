@@ -45,7 +45,11 @@ function requestUrl(input: FetchInput): string {
   return input.url;
 }
 
-/** The SRI hash for a request to a pinned executor (the library's `nonce` cache-buster ignored), else undefined. */
+/**
+ * The SRI hash for a request to a pinned executor, else undefined. The query string (the library adds a `nonce`
+ * cache-buster) and fragment are ignored: raw.githubusercontent.com serves the same file whatever they are, so a
+ * library update that adds parameters still gets the integrity check.
+ */
 export function executorIntegrity(
   input: FetchInput,
   integrity: Readonly<Record<string, string>> = NEAR_EXECUTOR_INTEGRITY,
@@ -56,7 +60,7 @@ export function executorIntegrity(
   } catch {
     return undefined;
   }
-  url.searchParams.delete("nonce");
+  url.search = "";
   url.hash = "";
   return Object.hasOwn(integrity, url.href) ? integrity[url.href] : undefined;
 }

@@ -126,7 +126,7 @@ describe("executor integrity", () => {
     expect(executorIntegrity(`${url}?nonce=6f1c`)).toBe(sri);
     expect(executorIntegrity(new URL(`${url}#x`))).toBe(sri);
     expect(executorIntegrity({ url } as Request)).toBe(sri);
-    expect(executorIntegrity(`${url}?nonce=1&v=2`)).toBeUndefined();
+    expect(executorIntegrity(`${url}?nonce=1&v=2`)).toBe(sri);
     expect(executorIntegrity(url.replace(NEAR_SELECTOR_COMMIT, "refs/heads/main"))).toBeUndefined();
     expect(executorIntegrity("/api/v1/x")).toBeUndefined();
     expect(executorIntegrity("https://raw.githubusercontent.com/toString")).toBeUndefined();
