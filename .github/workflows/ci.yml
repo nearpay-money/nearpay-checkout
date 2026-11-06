@@ -1,0 +1,36 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      # @nearpay/* come from a registry: the local Verdaccio in development, GitHub Packages once
+      # remotes exist (repository variable NP_REGISTRY_URL + secret NP_REGISTRY_TOKEN).
+      - name: Point the NearPay scope at the CI registry
+        if: ${{ vars.NP_REGISTRY_URL != '' }}
+        env:
+          NP_REGISTRY_URL: ${{ vars.NP_REGISTRY_URL }}
+          NP_REGISTRY_TOKEN: ${{ secrets.NP_REGISTRY_TOKEN }}
+        run: |
+          host="${NP_REGISTRY_URL#http:}"
+          host="${host#https:}"
+          {
+            echo "@nearpay:registry=${NP_REGISTRY_URL}"
+            echo "${host}:_authToken=${NP_REGISTRY_TOKEN}"
+          } > .npmrc
+      - run: pnpm install --frozen-lockfile
+      # The production build pins the sentinel public keys of the target environment.
+      - run: pnpm verify
+        env:
+          VITE_SENTINEL_KEYS: ${{ vars.NP_SENTINEL_KEYS }}
+          NP_CHROME: /usr/bin/google-chrome

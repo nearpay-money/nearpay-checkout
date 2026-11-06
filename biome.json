@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!dist", "!dist-e2e", "!**/coverage", "!test-results", "!playwright-report"]
+    "includes": ["**", "!dist", "!dist-e2e", "!**/coverage", "!test-results", "!playwright-report", "!**/*.md"]
   },
   "formatter": {
     "enabled": true,

@@ -44,7 +44,15 @@ export function installBridge(win: Window, timeoutMs = 10_000): Bridge {
       if (!framed) return Promise.resolve("rejected");
       return new Promise((resolve) => {
         const check = (p: Pending): boolean => {
-          if (!initAccepted({ origin: p.origin, fromParent: p.fromParent }, allowed, ancestor())) return false;
+          if (!initAccepted({ origin: p.origin, fromParent: p.fromParent }, allowed, ancestor())) {
+            // The parent itself is not an allowed site → blocked at once (never answered).
+            // Messages from any other window are ignored.
+            if (!p.fromParent) return false;
+            waiter = null;
+            clearTimeout(timer);
+            resolve("rejected");
+            return true;
+          }
           parentOrigin = p.origin;
           waiter = null;
           clearTimeout(timer);
@@ -55,7 +63,6 @@ export function installBridge(win: Window, timeoutMs = 10_000): Bridge {
           waiter = null;
           resolve("rejected");
         }, timeoutMs);
-        // Messages from other origins are ignored (never answered); keep waiting for the parent.
         for (const p of pending.splice(0)) if (check(p)) return;
         waiter = (p) => {
           check(p);

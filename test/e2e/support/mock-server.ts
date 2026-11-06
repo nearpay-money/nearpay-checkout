@@ -259,6 +259,13 @@ export class MockNearPay {
     this.setIntent(s, "succeeded");
   }
 
+  /** Body of the n-th call to a route (throws when there is none). */
+  bodyOf<T = Record<string, string>>(route: string, n = 0): T {
+    const c = this.callsTo(route)[n];
+    if (!c) throw new Error(`no call ${n} to ${route}`);
+    return c.body as T;
+  }
+
   callsTo(route: string): Call[] {
     return this.calls.filter((c) => c.route === route);
   }

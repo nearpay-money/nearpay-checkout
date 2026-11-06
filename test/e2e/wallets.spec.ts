@@ -104,7 +104,7 @@ test("NEAR wallet (live): registers storage and ft_transfers the attested amount
   const calls = await page.evaluate(
     () => (window as unknown as { __nearCalls: { method: string; params: unknown }[] }).__nearCalls,
   );
-  const [tx] = calls[0]?.params as {
+  const [tx] = (calls[0] as { params: unknown }).params as {
     receiverId: string;
     actions: { params: { methodName: string; args: Record<string, unknown>; deposit: string } }[];
   }[];
@@ -112,7 +112,7 @@ test("NEAR wallet (live): registers storage and ft_transfers the attested amount
   expect(tx?.actions.map((a) => a.params.methodName)).toEqual(["storage_deposit", "ft_transfer"]);
   expect(tx?.actions[1]?.params.args).toEqual({ receiver_id: "f".repeat(64), amount: "2003000" });
   expect(mock.callsTo("submitDepositTx")[0]?.body).toEqual({ tx_hash: "9XKGkKdV8ZP2t5cE6z6V8S1Ud6eS3wQ7t2Fq9KcYQm1e" });
-  expect((mock.callsTo("createPaymentAttempt")[0]?.body as Record<string, string>).refund_to).toBe("payer.near");
+  expect(mock.bodyOf("createPaymentAttempt").refund_to).toBe("payer.near");
 });
 
 test("NEAR Intents balance (live): signs the attested requirement with NEP-413", async ({ page, mock }) => {
@@ -128,7 +128,7 @@ test("NEAR Intents balance (live): signs the attested requirement with NEP-413",
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
   expect(rpc).toEqual(["current_salt"]);
-  expect((mock.callsTo("createPaymentAttempt")[0]?.body as Record<string, string>).payer_wallet).toBe("payer.near");
+  expect(mock.bodyOf("createPaymentAttempt").payer_wallet).toBe("payer.near");
   const body = mock.callsTo("submitSignedIntent")[0]?.body as { signed: unknown };
   const signed = MultiPayload.parse(body.signed);
   expect(signed.standard).toBe("nep413");
@@ -156,10 +156,8 @@ test("EVM Intents balance (live): ERC-191 personal_sign from the eth-implicit ac
   await page.getByTestId("continue").click();
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
-  expect((mock.callsTo("createPaymentAttempt")[0]?.body as Record<string, string>).payer_wallet).toBe(
-    "0x42e06263bb5346ae6421ab1ec1019824e7b284e1",
-  );
-  const signed = MultiPayload.parse((mock.callsTo("submitSignedIntent")[0]?.body as { signed: unknown }).signed);
+  expect(mock.bodyOf("createPaymentAttempt").payer_wallet).toBe("0x42e06263bb5346ae6421ab1ec1019824e7b284e1");
+  const signed = MultiPayload.parse(mock.bodyOf<{ signed: unknown }>("submitSignedIntent").signed);
   expect(signed.standard).toBe("erc191");
   if (signed.standard === "erc191") expect(JSON.parse(signed.payload).verifying_contract).toBe("intents.near");
 });
