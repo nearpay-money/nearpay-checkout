@@ -116,8 +116,12 @@ export function resolveConfig(
   };
 }
 
-/** NEAR Connect fetches its wallet manifest and wallet executors from these hosts. */
-export const NEAR_CONNECT_HOSTS = ["https://raw.githubusercontent.com", "https://cdn.jsdelivr.net"] as const;
+/**
+ * NEAR Connect fetches the wallet executors of the pinned manifest (src/wallets/near/manifest.ts) from this host,
+ * at full commit SHAs and with SRI. The manifest itself is bundled, so the library's fallback manifest host
+ * (cdn.jsdelivr.net) is not needed.
+ */
+export const NEAR_CONNECT_HOSTS = ["https://raw.githubusercontent.com"] as const;
 const TURNSTILE = "https://challenges.cloudflare.com";
 
 /**
