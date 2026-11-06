@@ -330,6 +330,9 @@ describe("build-time key pinning", () => {
     expect(csp).toContain("default-src 'none'");
     expect(csp).toContain("script-src 'self' 'nonce-{{NP_CSP_NONCE}}' https://challenges.cloudflare.com");
     expect(csp).not.toContain("unsafe-inline");
+    // NEAR Connect: pinned executors on raw.githubusercontent.com; no runtime manifest host.
+    expect(csp).toMatch(/connect-src [^;]*https:\/\/raw\.githubusercontent\.com/);
+    expect(csp).not.toContain("cdn.jsdelivr.net");
     const abs = resolveConfig(
       {
         VITE_SENTINEL_KEYS: JSON.stringify([key]),
