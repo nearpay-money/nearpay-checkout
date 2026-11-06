@@ -42,6 +42,28 @@ test("embedded on an allowed origin: ready, resize, appearance, complete", async
   expect(page.frames()[1]?.url()).toContain("/embed/");
 });
 
+test("embedded, polling only (no SSE): np:complete still carries the session's payment_intent", async ({
+  page,
+  mock,
+}) => {
+  const s = mock.create(
+    { ui_mode: "embedded", allowed_origins: [merchant.origin] },
+    { autoSucceed: true, streamDown: true },
+  );
+  merchant.iframeSrc = mock.url(s, "embed");
+  await page.goto(`${merchant.origin}/shop`);
+  const frame = page.frameLocator("#np");
+  await frame.getByTestId("path-manual").click();
+  await frame.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await frame.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
+  await frame.getByTestId("continue").click();
+  await frame.getByTestId("simulate").click();
+  await expect(frame.getByTestId("succeeded")).toBeVisible({ timeout: 15_000 });
+  await expect
+    .poll(async () => (await messages(page)).find((m) => m.type === "np:complete"))
+    .toEqual({ type: "np:complete", v: 1, session_id: s.session.id, payment_intent_id: s.intentId });
+});
+
 test("embedded: Close posts np:close to the verified parent", async ({ page, mock }) => {
   const s = mock.create({ ui_mode: "embedded", allowed_origins: [merchant.origin] });
   merchant.iframeSrc = mock.url(s, "embed");

@@ -9,12 +9,13 @@ import { useCheckout } from "../../app/useCheckout";
 import { t } from "../../lib/i18n/t";
 import { Button } from "../../ui/primitives";
 import { applyAppearance, type Bridge } from "./bridge";
+import { completeMessage } from "./protocol";
 
 export function EmbeddedCheckout({ sessionId, secret, bridge }: { sessionId: string; secret: string; bridge: Bridge }) {
   const c = useCheckout({ sessionId, secret });
   const [verified, setVerified] = useState<boolean>(false);
   const started = useRef(false);
-  const { session, phase, intent, blockReason } = c.state;
+  const { session, phase, blockReason } = c.state;
 
   useEffect(() => {
     if (!session || started.current) return;
@@ -51,12 +52,13 @@ export function EmbeddedCheckout({ sessionId, secret, bridge }: { sessionId: str
     return () => ro.disconnect();
   }, [verified, bridge]);
 
+  // np:complete — the intent id is on the session (spec 0.1.5); no need to wait for an SSE intent event.
   const completed = useRef(false);
   useEffect(() => {
-    if (!verified || phase !== "succeeded" || completed.current) return;
+    if (!verified || phase !== "succeeded" || !session || completed.current) return;
     completed.current = true;
-    bridge.post({ type: "np:complete", session_id: sessionId, payment_intent_id: intent?.id || null });
-  }, [verified, phase, intent, sessionId, bridge]);
+    bridge.post(completeMessage(session));
+  }, [verified, phase, session, bridge]);
 
   const reported = useRef<string | null>(null);
   useEffect(() => {
