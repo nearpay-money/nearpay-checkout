@@ -5,8 +5,12 @@
  * instead of weakening the policy. Its popup injects `<style>` elements without a nonce; they are
  * re-inserted with the nonce (we vouch for CSS shipped in our own bundle).
  *
+ * The wallet list is the reviewed snapshot in `./manifest.ts` (executors at full commit SHAs, checked with SRI);
+ * `./pinning.ts` enforces it. Nothing is downloaded from a mutable branch.
+ *
  * The mock-backed Playwright build (`__NP_E2E__`) uses a test wallet injected by the test instead.
  */
+import type { NearConnectorOptions } from "@hot-labs/near-connect";
 import { config, cspNonce } from "../../config";
 import type { NearTransaction } from "./tx";
 
@@ -73,15 +77,20 @@ export async function connectNearWallet(): Promise<NearWallet> {
   const nonce = cspNonce();
   if (!nonce) throw new NearUnavailable();
   guardStyles(nonce);
-  const { NearConnector } = await import("@hot-labs/near-connect");
-  const connector = new NearConnector({
+  const [lib, pin] = await Promise.all([import("@hot-labs/near-connect"), import("./pinning")]);
+  pin.installExecutorIntegrity();
+  const connector = new lib.NearConnector({
     network: config.nearNetwork,
     cspNonce: nonce,
     footerBranding: null,
     providers: { [config.nearNetwork]: [config.nearRpcUrl] },
     features: { signAndSendTransactions: true, signMessage: true },
+    // The library types `platform` as string[]; the manifest (and the library at runtime) use an object.
+    manifest: pin.pinnedManifest() as unknown as NearConnectorOptions["manifest"],
+    autoConnect: false,
+    storage: pin.withoutDebugWallets(new lib.LocalStorage()),
   });
-  const wallet = await connector.connect();
+  const wallet = await pin.connectPinnedWallet(connector, lib);
   const accounts = await wallet.getAccounts({ network: config.nearNetwork });
   const accountId = accounts[0]?.accountId;
   if (!accountId) throw new Error("The wallet returned no account.");
