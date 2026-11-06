@@ -198,12 +198,13 @@ export class MockNearPay {
   create(over: Partial<Session> = {}, opts: Partial<Omit<MockSession, "session">> = {}): MockSession {
     const id = nextId("cs");
     const secret = `${id}_secret_${"Zq9".repeat(10)}Ab`;
+    const intentId = opts.intentId ?? nextId("pi");
     const s: MockSession = {
-      session: { ...sessionFixture(), id, ...over },
+      session: { ...sessionFixture(), id, payment_intent: intentId as `pi_${string}`, ...over },
       secret,
       options: defaultOptions(),
       attempts: [],
-      intentId: nextId("pi"),
+      intentId,
       sentinel: "ok",
       deadlineS: 900,
       attemptError: null,

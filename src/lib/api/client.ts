@@ -6,7 +6,7 @@
  *
  * The client secret travels only in the `X-NearPay-Client-Secret` header and is never logged.
  */
-import { type AnyRoute, buildPath, type RouteResponse } from "@nearpay/spec";
+import { type AnyRoute, buildPath, type RouteResponse, safeParseTolerant } from "@nearpay/spec";
 import type { z } from "zod";
 import { config } from "../../config";
 
@@ -40,21 +40,15 @@ export function isApiError(e: unknown, code?: string): e is ApiError {
   return e instanceof ApiError && (code === undefined || e.code === code);
 }
 
-/** Parses a response object; unknown open-enum values pass through (UI treats them as "unknown"). */
+/**
+ * Parses a response object with the spec's `safeParseTolerant` (spec 0.1.5): unknown values of open
+ * enums pass through verbatim (the UI treats them as "unknown"); closed enums, literals, shapes and
+ * missing fields fail with `invalid_response`.
+ */
 export function parseTolerant<S extends z.ZodType>(schema: S, data: unknown): z.output<S> {
-  const r = schema.safeParse(data);
+  const r = safeParseTolerant(schema, data);
   if (r.success) return r.data;
-  if (r.error.issues.length > 0 && r.error.issues.every((i) => i.code === "invalid_value" && i.values.length > 1)) {
-    return data as z.output<S>;
-  }
-  throw new ApiError({
-    status: 0,
-    code: "invalid_response",
-    type: "api_error",
-    message: "The server sent a response this page does not understand.",
-    param: null,
-    retryAfterS: null,
-  });
+  throw parseTolerantFailure();
 }
 
 export interface CallOptions {

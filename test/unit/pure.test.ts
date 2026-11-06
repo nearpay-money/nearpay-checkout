@@ -12,6 +12,7 @@ import { errorText, hasMessage, t } from "../../src/lib/i18n/t";
 import { computeFingerprint, fingerprintGroups } from "../../src/lib/integrity/fingerprint";
 import { currencyExponent, formatBaseUnits, formatFiat, formatPrice, gte } from "../../src/lib/money/format";
 import {
+  completeMessage,
   envelope,
   initAccepted,
   normalizeOrigin,
@@ -20,6 +21,7 @@ import {
   sanitizeAppearance,
 } from "../../src/routes/embed/protocol";
 import { vector } from "../support/fixtures";
+import { session } from "../support/sessions";
 
 const USDC_BASE = "nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near";
 const USDC_NEAR = "nep141:17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
@@ -230,6 +232,15 @@ describe("embed protocol (§5.3, §6)", () => {
   });
   it("versions outbound messages", () => {
     expect(envelope({ type: "np:resize", height: 400 })).toEqual({ type: "np:resize", height: 400, v: 1 });
+  });
+  it("np:complete reports the session's payment_intent (spec 0.1.5), no SSE intent event needed", () => {
+    const s = session({ payment_intent: "pi_01jbz9k3m4n5p6q7r8s9t0v1zz" });
+    expect(envelope(completeMessage(s))).toEqual({
+      type: "np:complete",
+      v: 1,
+      session_id: s.id,
+      payment_intent_id: "pi_01jbz9k3m4n5p6q7r8s9t0v1zz",
+    });
   });
 });
 

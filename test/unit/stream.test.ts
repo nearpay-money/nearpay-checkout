@@ -263,8 +263,18 @@ describe("API client", () => {
     );
   });
 
-  it("parseTolerant accepts unknown enum values only", () => {
+  it("parseTolerant accepts unknown open-enum values only (spec safeParseTolerant)", () => {
     expect(parseTolerant(PublicCheckoutSession, session({ status: "paused" as never })).status).toBe("paused");
+    const both = parseTolerant(
+      PublicCheckoutSession,
+      session({ status: "paused" as never, intent_status: "x" as never }),
+    );
+    expect([both.status, both.intent_status]).toEqual(["paused", "x"]);
     expect(() => parseTolerant(PublicCheckoutSession, { ...session(), object: "x" })).toThrow(ApiError);
+    // closed enums stay strict (ui_mode is closed)
+    expect(() => parseTolerant(PublicCheckoutSession, session({ ui_mode: "popup" as never }))).toThrow(ApiError);
+    // spec 0.1.5: payment_intent is required on the public session
+    const { payment_intent: _omit, ...without } = session();
+    expect(() => parseTolerant(PublicCheckoutSession, without)).toThrow(ApiError);
   });
 });

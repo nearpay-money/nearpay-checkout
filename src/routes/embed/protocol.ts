@@ -5,7 +5,7 @@
  *   parent → iframe  np:init      {appearance: {theme, accent, radius}, locale}
  *   iframe → parent  np:ready     {}
  *   iframe → parent  np:resize    {height}
- *   iframe → parent  np:complete  {session_id, payment_intent_id}
+ *   iframe → parent  np:complete  {session_id, payment_intent_id}   (id from PublicCheckoutSession.payment_intent)
  *   iframe → parent  np:error     {code, message}
  *   iframe → parent  np:close     {}
  *
@@ -82,9 +82,17 @@ export function initAccepted(
 export type OutboundMessage =
   | { readonly type: "np:ready" }
   | { readonly type: "np:resize"; readonly height: number }
-  | { readonly type: "np:complete"; readonly session_id: string; readonly payment_intent_id: string | null }
+  | { readonly type: "np:complete"; readonly session_id: string; readonly payment_intent_id: string }
   | { readonly type: "np:error"; readonly code: string; readonly message: string }
   | { readonly type: "np:close" };
+
+/**
+ * `np:complete` for a session: the intent id comes from the session itself (`payment_intent`, spec 0.1.5),
+ * so it is known even when the page only polled and never received an SSE `intent` event.
+ */
+export function completeMessage(session: { readonly id: string; readonly payment_intent: string }): OutboundMessage {
+  return { type: "np:complete", session_id: session.id, payment_intent_id: session.payment_intent };
+}
 
 export function envelope(m: OutboundMessage): Record<string, unknown> {
   return { ...m, v: PROTOCOL_VERSION };

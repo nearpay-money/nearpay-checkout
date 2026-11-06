@@ -17,6 +17,7 @@ export function session(over: Partial<Session> = {}): Session {
     object: "checkout_session",
     livemode: false,
     status: "open",
+    payment_intent: "pi_01jbz9k3m4n5p6q7r8s9t0v1w2",
     intent_status: "requires_payment",
     amount: 200,
     currency: "usd",

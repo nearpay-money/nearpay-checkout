@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  "@nearpay/spec": 0.1.4
+  "@nearpay/spec": 0.1.5
 
 importers:
   .:
@@ -14,8 +14,8 @@ importers:
         specifier: 0.11.4
         version: 0.11.4
       "@nearpay/spec":
-        specifier: 0.1.4
-        version: 0.1.4(zod@4.6.7)
+        specifier: 0.1.5
+        version: 0.1.5(zod@4.6.7)
       "@noble/curves":
         specifier: 2.4.0
         version: 2.4.0
@@ -368,9 +368,9 @@ packages:
     resolution:
       { integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw== }
 
-  "@nearpay/spec@0.1.4":
+  "@nearpay/spec@0.1.5":
     resolution:
-      { integrity: sha512-XGwDLXWKb3Q/BC1RybRf0C0TVIllkuytmjzkpRucAp6yCmrGHZq0COOTqRbXIaJMhf6wbCgWDNiIQECdsa/qow== }
+      { integrity: sha512-u6/g6kr3W7XbfCeE5x00vCwn1qw1W/Zk+4zzfDgnoT3Bn/shjAihYzlP2RQocJE3zuD6vlv7VvY3JAzpw1J3Mw== }
     engines: { node: ">=22.11.0" }
     peerDependencies:
       zod: ^4.6.7
@@ -1277,7 +1277,7 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.6.0
 
-  "@nearpay/spec@0.1.4(zod@4.6.7)":
+  "@nearpay/spec@0.1.5(zod@4.6.7)":
     dependencies:
       zod: 4.6.7
 
