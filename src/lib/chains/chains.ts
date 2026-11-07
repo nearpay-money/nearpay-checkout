@@ -99,15 +99,20 @@ export type WalletAsset =
 
 const OMFT_RE = /^nep141:([a-z0-9]+)(?:-(0x[0-9a-f]{40}))?\.omft\.near$/;
 const NEP141_RE = /^nep141:((?:(?:[a-z\d]+[-_])*[a-z\d]+\.)*(?:[a-z\d]+[-_])*[a-z\d]+)$/;
+const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const NEAR_ACCOUNT_RE = /^(?:(?:[a-z\d]+[-_])*[a-z\d]+\.)*(?:[a-z\d]+[-_])*[a-z\d]+$/;
 
 /**
- * Derives the on-chain token of an origin asset on `chain`. EVM assets must be omft-bridged
- * (`<prefix>-0x<contract>.omft.near`) with a prefix that belongs to `chain`; NEAR assets are NEP-141
- * token accounts (`wrap.near` is paid from native NEAR).
+ * Token contract of a payment option (`PaymentOption.token`, spec 0.2.0, CR-15-06). `undefined` = the
+ * server predates the field; `null` = the server knows no wallet recipe (manual path only).
  */
-export function walletAsset(assetId: string, chain: string): WalletAsset | null {
-  const info = getChain(chain);
-  if (!info) return null;
+export interface TokenHint {
+  readonly standard: string;
+  readonly address: string | null;
+}
+
+/** Derivation from the asset id alone (omft-bridged EVM assets, NEP-141 accounts). */
+function derivedWalletAsset(assetId: string, info: ChainInfo): WalletAsset | null {
   if (info.family === "evm") {
     const m = OMFT_RE.exec(assetId);
     if (!m || !info.omft || m[1] !== info.omft || info.evmChainId === undefined) return null;
@@ -123,4 +128,47 @@ export function walletAsset(assetId: string, chain: string): WalletAsset | null 
     return token === "wrap.near" ? { kind: "near_wrap", token } : { kind: "near_nep141", token };
   }
   return null;
+}
+
+/** Wallet recipe from a typed token contract (only standards with a transfer the checkout builds). */
+function hintedWalletAsset(token: TokenHint, info: ChainInfo): WalletAsset | null {
+  if (info.family === "evm" && info.evmChainId !== undefined) {
+    if (token.standard === "native" && token.address === null) return { kind: "evm_native", chainId: info.evmChainId };
+    if (token.standard === "erc20" && token.address !== null && EVM_ADDRESS_RE.test(token.address)) {
+      return { kind: "evm_erc20", chainId: info.evmChainId, token: token.address.toLowerCase() };
+    }
+    return null;
+  }
+  if (info.family === "near" && token.standard === "nep141" && token.address !== null) {
+    const a = token.address;
+    if (a.length < 2 || a.length > 64 || !NEAR_ACCOUNT_RE.test(a)) return null;
+    return a === "wrap.near" ? { kind: "near_wrap", token: "wrap.near" } : { kind: "near_nep141", token: a };
+  }
+  return null;
+}
+
+const sameAsset = (a: WalletAsset, b: WalletAsset): boolean =>
+  a.kind === b.kind &&
+  ("token" in a ? a.token.toLowerCase() : "") === ("token" in b ? b.token.toLowerCase() : "") &&
+  ("chainId" in a ? a.chainId : 0) === ("chainId" in b ? b.chainId : 0);
+
+/**
+ * How the wallet path pays an origin asset on `chain`.
+ *
+ * - The asset id is attested (sentinel signs `origin_asset_id`), so a recipe derived from it wins:
+ *   omft-bridged EVM assets (`<prefix>-0x<contract>.omft.near`, prefix of `chain`) and NEP-141 token
+ *   accounts (`wrap.near` is paid from native NEAR).
+ * - Otherwise the typed `token` of the payment option (CR-15-06) is used: `erc20` / `native` on EVM
+ *   chains, `nep141` on NEAR. `spl`, `other` and unknown standards stay manual-path only.
+ * - A `token` that contradicts the derivable recipe disables the wallet path (fail closed).
+ * - `token` null or absent (older servers): only the derived recipe applies.
+ */
+export function walletAsset(assetId: string, chain: string, token?: TokenHint | null): WalletAsset | null {
+  const info = getChain(chain);
+  if (!info) return null;
+  const derived = derivedWalletAsset(assetId, info);
+  if (token === undefined || token === null) return derived;
+  const hinted = hintedWalletAsset(token, info);
+  if (derived) return hinted && sameAsset(derived, hinted) ? derived : null;
+  return hinted;
 }
