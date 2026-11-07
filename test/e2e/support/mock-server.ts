@@ -12,11 +12,14 @@ import {
   type AnyRoute,
   createDepositInstructionsAttestation,
   createPaymentAttempt,
+  createPaymentLinkSession,
   getPublicCheckoutSession,
+  getPublicPaymentLink,
   IntentStreamEvent,
   listPaymentOptions,
   PayerAttempt,
   PublicCheckoutSession,
+  PublicPaymentLink,
   pathMatcher,
   signalDepositSent,
   simulateDeposit,
@@ -63,7 +66,20 @@ export interface MockSession {
   /** Advance automatically after a deposit signal (simulate / tx / signed intent). */
   autoSucceed: boolean;
   memo: string | null;
+  /** Sentinel attests `asset` (spec 0.2.0, CR-15-07); "wrong" attests another asset. */
+  attestAsset: "yes" | "no" | "wrong";
+  /** Delay before sentinel answers (screenshots of "Verifying this checkout"). */
+  attestDelayMs: number;
   streams: Set<ServerResponse>;
+}
+
+export interface MockLink {
+  link: Record<string, unknown> & { id: string; active: boolean; livemode: boolean };
+  /** Error code returned by the next createPaymentLinkSession call. */
+  sessionError: string | null;
+  /** Options for the sessions the link opens. */
+  sessionOpts: Partial<Omit<MockSession, "session">>;
+  sessions: MockSession[];
 }
 
 export interface Call {
@@ -82,6 +98,8 @@ const ROUTES: AnyRoute[] = [
   streamCheckoutSession,
   simulateDeposit,
   createDepositInstructionsAttestation,
+  getPublicPaymentLink,
+  createPaymentLinkSession,
 ];
 
 const ERRORS: Record<string, [number, string]> = {
@@ -93,6 +111,9 @@ const ERRORS: Record<string, [number, string]> = {
   attestation_refused: [409, "state_conflict"],
   attestation_stale: [409, "state_conflict"],
   attestation_unavailable: [503, "api_error"],
+  link_inactive: [409, "state_conflict"],
+  resource_missing: [404, "invalid_request_error"],
+  account_not_live: [403, "permission_error"],
 };
 
 const MIME: Record<string, string> = {
@@ -162,6 +183,7 @@ function check<T>(schema: { safeParse(v: unknown): { success: boolean; error?: u
 
 export class MockNearPay {
   readonly sessions = new Map<string, MockSession>();
+  readonly links = new Map<string, MockLink>();
   readonly calls: Call[] = [];
   private server: Server | null = null;
   port = 0;
@@ -192,6 +214,7 @@ export class MockNearPay {
   reset(): void {
     for (const s of this.sessions.values()) for (const r of s.streams) r.end();
     this.sessions.clear();
+    this.links.clear();
     this.calls.length = 0;
   }
 
@@ -211,12 +234,36 @@ export class MockNearPay {
       streamDown: false,
       autoSucceed: false,
       memo: null,
+      attestAsset: "yes",
+      attestDelayMs: 0,
       streams: new Set(),
       ...opts,
     };
     check(PublicCheckoutSession, s.session, "session");
     this.sessions.set(id, s);
     return s;
+  }
+
+  /** A payment link (`PublicPaymentLink`) that opens mock sessions. */
+  createLink(over: Record<string, unknown> = {}, opts: Partial<Omit<MockLink, "link">> = {}): MockLink {
+    const id = nextId("plink");
+    const link = {
+      id,
+      object: "payment_link",
+      livemode: false,
+      active: true,
+      amount: 4900,
+      currency: "usd",
+      asset_id: null,
+      display: { merchant_name_unverified: "Acme (unverified)", description: "Pro plan" },
+      settlement: { asset_id: USDC_NEAR, chain: "near:mainnet", type: "intents_account" },
+      collect_email: false,
+      ...over,
+    } as MockLink["link"];
+    check(PublicPaymentLink, link, "payment link");
+    const l: MockLink = { link, sessionError: null, sessionOpts: {}, sessions: [], ...opts };
+    this.links.set(id, l);
+    return l;
   }
 
   url(s: MockSession, mode: "c" | "embed" = "c"): string {
@@ -302,6 +349,38 @@ export class MockNearPay {
     if (route.query) check(route.query, Object.fromEntries(url.searchParams), `query for ${route.id}`);
 
     if (route === createDepositInstructionsAttestation) return this.attest(res, body as Record<string, unknown>);
+    if (route === getPublicPaymentLink || route === createPaymentLinkSession) {
+      const l = this.links.get(path.split("/")[3] as string);
+      if (!l) return apiError(res, "resource_missing");
+      if (route === getPublicPaymentLink) return send(res, 200, check(PublicPaymentLink, l.link, "payment link"));
+      if (l.sessionError) return apiError(res, l.sessionError);
+      if (!l.link.active) return apiError(res, "link_inactive");
+      const s = this.create(
+        {
+          livemode: l.link.livemode,
+          amount: l.link.amount as number,
+          currency: l.link.currency as string,
+          display: { merchant_name_unverified: "Acme (unverified)", description: "Pro plan" },
+        },
+        l.sessionOpts,
+      );
+      l.sessions.push(s);
+      return send(
+        res,
+        201,
+        check(
+          createPaymentLinkSession.response,
+          {
+            object: "payment_link_session",
+            checkout_session: s.session.id,
+            client_secret: s.secret,
+            url: this.url(s).replace("http://127.0.0.1", "https://pay.example"),
+            expires_at: s.session.expires_at,
+          },
+          "payment link session",
+        ),
+      );
+    }
 
     const id = path.split("/")[4] as string;
     const s = this.sessions.get(id);
@@ -395,7 +474,11 @@ export class MockNearPay {
     send(res, 201, a);
   }
 
-  private attest(res: ServerResponse, body: Record<string, unknown>) {
+  private async attest(res: ServerResponse, body: Record<string, unknown>) {
+    const delay = [...this.sessions.values()].find((x) =>
+      x.attempts.some((a) => a.id === body.attempt_id),
+    )?.attestDelayMs;
+    if (delay) await new Promise((r) => setTimeout(r, delay));
     const attemptId = body.attempt_id as string;
     const s = [...this.sessions.values()].find((x) => x.attempts.some((a) => a.id === attemptId));
     const a = s?.attempts.find((x) => x.id === attemptId);
@@ -422,6 +505,18 @@ export class MockNearPay {
             },
           }
         : { requirement: a.intents_requirement }),
+      ...(s.attestAsset === "no"
+        ? {}
+        : {
+            asset: {
+              asset_id:
+                s.attestAsset === "wrong"
+                  ? "nep141:other.near"
+                  : (a.deposit?.origin_asset_id ?? a.intents_requirement?.token),
+              symbol: "USDC",
+              decimals: 6,
+            },
+          }),
       merchant: { name: "Acme GmbH", kyb_verified: true },
       destination: { asset_id: USDC_NEAR, chain: "near:mainnet", fingerprint: "YZMN-R81Z-BR" },
       issued_at: new Date().toISOString(),

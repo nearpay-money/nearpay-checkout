@@ -3,12 +3,13 @@
  * `np:init` against `allowed_origins` (+ ancestorOrigins), then runs the same flow as hosted mode and
  * reports `np:ready`, `np:resize`, `np:complete`, `np:error` and `np:close` to the verified parent.
  */
+import { Button } from "@nearpay-internal/ui";
 import { useEffect, useRef, useState } from "react";
+import { applyCheckoutAppearance } from "../../app/appearance";
 import { CheckoutView } from "../../app/CheckoutView";
 import { useCheckout } from "../../app/useCheckout";
 import { t } from "../../lib/i18n/t";
-import { Button } from "../../ui/primitives";
-import { applyAppearance, type Bridge } from "./bridge";
+import type { Bridge } from "./bridge";
 import { completeMessage } from "./protocol";
 
 export function EmbeddedCheckout({ sessionId, secret, bridge }: { sessionId: string; secret: string; bridge: Bridge }) {
@@ -29,7 +30,7 @@ export function EmbeddedCheckout({ sessionId, secret, bridge }: { sessionId: str
         c.actions.block("origin_mismatch");
         return;
       }
-      applyAppearance(document.documentElement, r.init.appearance);
+      applyCheckoutAppearance(document.documentElement, r.init.appearance);
       setVerified(true);
       bridge.post({ type: "np:ready" });
     });
@@ -67,13 +68,15 @@ export function EmbeddedCheckout({ sessionId, secret, bridge }: { sessionId: str
     bridge.post({ type: "np:error", code: blockReason, message: t(`blocked.${blockReason}`) });
   }, [verified, phase, blockReason, bridge]);
 
-  // Nothing but a spinner until the parent is verified; a rejected parent sees only the blocked notice.
-  if (!verified && phase !== "blocked") return <CheckoutView c={{ ...c, state: { ...c.state, phase: "loading" } }} />;
-  const footer =
+  // Nothing but a skeleton until the parent is verified; a rejected parent sees only the blocked notice.
+  if (!verified && phase !== "blocked") {
+    return <CheckoutView c={{ ...c, state: { ...c.state, phase: "loading", session: null } }} mode="embed" />;
+  }
+  const close =
     verified && phase !== "succeeded" && phase !== "processing" ? (
-      <Button kind="link" onClick={() => bridge.post({ type: "np:close" })} testId="close">
+      <Button variant="ghost" fullWidth onClick={() => bridge.post({ type: "np:close" })} data-testid="close">
         {t("app.close")}
       </Button>
     ) : null;
-  return <CheckoutView c={c} footer={footer} />;
+  return <CheckoutView c={c} mode="embed" extra={close} />;
 }

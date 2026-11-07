@@ -1,62 +1,283 @@
-/** Wallet path (§5.4): one button that builds the attested transfer in the connected wallet. */
-import type { Option } from "../../app/machine";
+/**
+ * Wallet path after sentinel verification (§4 pay_wallet, §5.4): the review frame (token card with
+ * Change, Purchase / Payment fees / Total to send, wallet network-fee note, Pay, quote countdown) and
+ * its variants: updated total after a re-quote, test mode ("Try a payment" + Simulate payment, never a
+ * broadcast — §5.8), approve in your wallet, not approved, not enough funds. Every amount shown is the
+ * ATTESTED one.
+ */
+import {
+  Button,
+  Callout,
+  ClockIcon,
+  Countdown,
+  type KeyValueItem,
+  KeyValueList,
+  Money,
+  SelectionCard,
+  WalletIcon,
+} from "@nearpay-internal/ui";
+import type { ReactNode } from "react";
+import { moneyText, referenceText, type ViewModel } from "../../app/model";
+import type { ScreenId } from "../../app/screens";
+import type { Checkout } from "../../app/useCheckout";
 import { chainName, getChain } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
-import type { VerifiedInstructions } from "../../lib/integrity/verify";
-import { formatBaseUnits } from "../../lib/money/format";
-import { Button, Notice } from "../../ui/primitives";
-import { Countdown } from "./Countdown";
-import { amountLabel } from "./ManualInstructions";
+import { assetMoney } from "../../lib/money/display";
+import { ScreenTitle, StateScreen } from "../../ui/blocks";
+import { shortAddress } from "../wallet-connect/wallets";
 
-export function WalletPay(props: {
-  verified: VerifiedInstructions;
-  meta: Option | null;
-  testMode: boolean;
-  busy: boolean;
-  onPay: () => void;
-  onSimulate: () => void;
-}) {
-  const a = props.verified.attestation;
-  let label: string;
-  let hint: string | null = null;
-  if (a.kind === "route_quote" && a.deposit) {
-    const [amount, symbol] = splitAmount(amountLabel(a.deposit.amount_in, props.meta, a.deposit.origin_asset_id));
-    label = t("pay.wallet.send", { amount, symbol });
-    if (getChain(a.deposit.chain)?.family === "evm")
-      hint = t("pay.wallet.switchChain", { chain: chainName(a.deposit.chain) });
-  } else if (a.requirement) {
-    const total = (BigInt(a.requirement.amount) + BigInt(a.requirement.fee_amount)).toString();
-    const meta = props.meta;
-    const amount = meta ? formatBaseUnits(total, meta.decimals) : total;
-    label = t("pay.wallet.sign", { amount, symbol: meta?.symbol ?? "" });
-    hint = t("pay.wallet.signHint");
-  } else {
-    return null;
-  }
+/** Splits a message around `{time}` so a live `<Countdown>` can sit inside the sentence. */
+export function withCountdown(template: string, deadline: number, onExpire?: () => void): ReactNode {
+  const [before, after] = template.split("{time}");
   return (
-    <div className="np-instructions" data-testid="wallet-pay">
-      <h2 className="np-h2">{t("pay.wallet.title")}</h2>
-      {hint ? <p className="np-help">{hint}</p> : null}
-      <p className="np-deadline">
-        <Countdown until={props.verified.validUntil} render={(time) => t("deposit.timeLeft", { time })} />
+    <>
+      {before}
+      <Countdown deadline={deadline} {...(onExpire ? { onExpire } : {})} />
+      {after}
+    </>
+  );
+}
+
+function amountNode(amount: string | null, vm: ViewModel): ReactNode {
+  if (!amount) return "—";
+  const m = assetMoney(amount, vm.asset);
+  return m ? <Money {...m} /> : `${amount} base units`;
+}
+
+function amountText(amount: string | null, vm: ViewModel): string {
+  if (!amount) return "";
+  return moneyText(assetMoney(amount, vm.asset), `${amount} base units`);
+}
+
+function network(c: Checkout): string {
+  const a = c.state.verified?.attestation;
+  if (!a) return "";
+  return a.kind === "intents_transfer" ? "NEAR Intents" : chainName(a.deposit?.chain ?? "");
+}
+
+function Selection({ c, vm, disabled }: { c: Checkout; vm: ViewModel; disabled: boolean }) {
+  const w = c.state.wallet;
+  const symbol = vm.asset?.symbol ?? c.state.option?.symbol ?? "";
+  return (
+    <SelectionCard
+      avatar={symbol || "?"}
+      title={`${symbol} · ${network(c)}`}
+      description={w ? t("wallet.address", { address: shortAddress(w.address) }) : undefined}
+      action={
+        <button
+          type="button"
+          className="np-link-button"
+          onClick={c.actions.change}
+          disabled={disabled}
+          data-testid="change-option"
+        >
+          {t("review.change")}
+        </button>
+      }
+    />
+  );
+}
+
+function Totals({ c, vm, compact = false }: { c: Checkout; vm: ViewModel; compact?: boolean }) {
+  // Desktop: the order summary column carries the breakdown; the review card shows what is sent.
+  const items: KeyValueItem[] = compact
+    ? [{ label: t("summary.youSend"), value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span> }]
+    : [
+        {
+          label: t("summary.purchase"),
+          value: <span data-testid="purchase">{vm.price ? <Money {...vm.price} /> : vm.priceText}</span>,
+        },
+        {
+          label: t("summary.fees"),
+          value: vm.fee ? (
+            amountNode(vm.fee, vm)
+          ) : (
+            <span className="np-text-secondary">{t("summary.feesIncluded")}</span>
+          ),
+        },
+        {
+          label: t("summary.totalToSend"),
+          value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span>,
+          total: true,
+        },
+      ];
+  const att = c.state.verified?.attestation;
+  const evm = att?.kind === "route_quote" && att.deposit && getChain(att.deposit.chain)?.family === "evm";
+  return (
+    <div className="np-stack np-stack--sm">
+      <KeyValueList items={items} />
+      <p className="np-checkout__note">
+        {att?.kind === "intents_transfer" ? t("review.intentsFee") : t("review.walletFee")}
+        {evm && att?.deposit ? ` ${t("review.switchChain", { chain: chainName(att.deposit.chain) })}` : ""}
       </p>
-      {props.testMode ? (
-        <>
-          <Notice kind="info">{t("pay.wallet.testMode")}</Notice>
-          <Button onClick={props.onSimulate} disabled={props.busy} testId="simulate">
-            {props.busy ? t("pay.simulating") : t("pay.simulate")}
-          </Button>
-        </>
-      ) : (
-        <Button onClick={props.onPay} disabled={props.busy} testId="wallet-send">
-          {props.busy ? t("pay.wallet.sending") : label}
-        </Button>
-      )}
     </div>
   );
 }
 
-function splitAmount(s: string): [string, string] {
-  const i = s.lastIndexOf(" ");
-  return i < 0 ? [s, ""] : [s.slice(0, i), s.slice(i + 1)];
+function QuoteNote({ c }: { c: Checkout }) {
+  const until = c.state.verified?.validUntil;
+  if (!until) return null;
+  return (
+    <p className="np-checkout__note ck-center" data-testid="countdown">
+      {withCountdown(t("review.quote"), until)}
+    </p>
+  );
+}
+
+export function WalletPay({
+  c,
+  vm,
+  screen,
+  wide,
+}: {
+  c: Checkout;
+  vm: ViewModel;
+  screen: Extract<
+    ScreenId,
+    "review" | "review_updated" | "test_payment" | "approve_in_wallet" | "not_approved" | "not_enough_funds"
+  >;
+  /** Desktop review: also offer "Send from another wallet". */
+  wide: boolean;
+}) {
+  const { actions, busy } = c;
+  const total = amountText(vm.total, vm);
+  const ref = vm.reference ? referenceText(vm.reference, vm.merchant?.name ?? null) : undefined;
+
+  if (screen === "approve_in_wallet") {
+    return (
+      <StateScreen
+        testId="wallet-pay"
+        icon={<ClockIcon />}
+        title={t("approve.title")}
+        body={t("approve.body", { amount: total, chain: network(c) })}
+        badge={t("approve.badge")}
+        callout={t("approve.callout")}
+        reference={ref}
+        actions={
+          <Button fullWidth loading loadingText={t("approve.waiting")} data-testid="wallet-send">
+            {t("approve.waiting")}
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (screen === "not_approved") {
+    return (
+      <StateScreen
+        testId="wallet-pay"
+        icon={<WalletIcon />}
+        title={t("notApproved.title")}
+        body={t("notApproved.body")}
+        badge={t("notApproved.badge")}
+        callout={t("notApproved.callout")}
+        reference={ref}
+        actions={
+          <>
+            <Button fullWidth onClick={actions.clearError} data-testid="try-again">
+              {t("notApproved.retry")}
+            </Button>
+            <Button fullWidth variant="secondary" onClick={actions.change}>
+              {t("funds.change")}
+            </Button>
+          </>
+        }
+      />
+    );
+  }
+
+  if (screen === "not_enough_funds") {
+    const symbol = vm.asset?.symbol ?? "";
+    return (
+      <section className="ck-screen" data-testid="wallet-pay">
+        <SelectionCard
+          avatar={symbol || "?"}
+          title={`${symbol} · ${network(c)}`}
+          description={t("funds.needed", { amount: total })}
+        />
+        <Callout tone="warning" title={t("funds.callout")} live>
+          {t("funds.body")}
+        </Callout>
+        <div className="np-stack">
+          <Button fullWidth onClick={actions.change} data-testid="choose-another">
+            {t("funds.change")}
+          </Button>
+          <Button fullWidth variant="secondary" onClick={actions.clearError} data-testid="check-again">
+            {t("funds.again")}
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  if (screen === "test_payment") {
+    return (
+      <section className="ck-screen" data-testid="wallet-pay" aria-labelledby="ck-test-title">
+        <ScreenTitle id="ck-test-title" title={t("test.title")} lede={t("test.body")} />
+        <Selection c={c} vm={vm} disabled={busy} />
+        <Totals c={c} vm={vm} />
+        <div className="np-stack">
+          <Button
+            fullWidth
+            onClick={() => void actions.simulate()}
+            loading={busy}
+            loadingText={t("test.simulating")}
+            data-testid="simulate"
+          >
+            {t("test.simulate")}
+          </Button>
+          <QuoteNote c={c} />
+        </div>
+      </section>
+    );
+  }
+
+  const payLabel = t("review.pay", { amount: total });
+  if (screen === "review_updated" && c.previousTotal) {
+    return (
+      <section className="ck-screen" data-testid="wallet-pay" aria-labelledby="ck-updated-title">
+        <Callout tone="warning" title={t("updated.callout")} reference={ref} live />
+        <ScreenTitle id="ck-updated-title" title={t("updated.title")} lede={t("updated.body")} />
+        <div className="np-stack np-stack--sm">
+          <KeyValueList
+            items={[
+              { label: t("updated.previous"), value: amountNode(c.previousTotal, vm) },
+              {
+                label: t("updated.updated"),
+                value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span>,
+              },
+            ]}
+          />
+          <p className="np-checkout__note">{t("updated.includes")}</p>
+        </div>
+        <div className="np-stack">
+          <Button fullWidth onClick={() => void actions.payWithWallet()} data-testid="wallet-send">
+            {payLabel}
+          </Button>
+          <QuoteNote c={c} />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="ck-screen" data-testid="wallet-pay" aria-labelledby="ck-review-title">
+      <h1 className={wide ? "ck-review-title" : "np-sr-only"} id="ck-review-title">
+        {t("review.title")}
+      </h1>
+      <Selection c={c} vm={vm} disabled={busy} />
+      <Totals c={c} vm={vm} compact={wide} />
+      <div className="np-stack">
+        <Button fullWidth onClick={() => void actions.payWithWallet()} data-testid="wallet-send">
+          {payLabel}
+        </Button>
+        {wide ? (
+          <Button fullWidth variant="secondary" onClick={actions.useManual} data-testid="use-manual">
+            {t("review.sendAnother")}
+          </Button>
+        ) : null}
+        <QuoteNote c={c} />
+      </div>
+    </section>
+  );
 }

@@ -20,14 +20,27 @@ test("embedded on an allowed origin: ready, resize, appearance, complete", async
   const first = await messages(page);
   expect(first[0]).toEqual({ type: "np:ready", v: 1 });
   expect(first.some((m) => m.type === "np:resize" && typeof m.height === "number" && m.height > 100)).toBe(true);
-  const accent = await page.frames()[1]?.evaluate(() => document.documentElement.style.getPropertyValue("--np-accent"));
-  expect(accent).toBe("#ff5500");
+  // Merchant appearance through the ui applyAppearance (CSSOM custom properties, accent kept WCAG AA).
+  const look = await page.frames()[1]?.evaluate(() => ({
+    theme: document.documentElement.getAttribute("data-theme"),
+    accent: document.documentElement.style.getPropertyValue("--np-color-accent"),
+    radius: document.documentElement.style.getPropertyValue("--np-radius-control"),
+    inline: document.querySelectorAll("[style]").length,
+  }));
+  expect(look).toMatchObject({ theme: "dark", radius: "4px" });
+  // The embedded document paints the merchant's theme (dark surface) over its full height.
+  const paint = await page.frames()[1]?.evaluate(() => ({
+    html: getComputedStyle(document.documentElement).backgroundColor,
+    body: getComputedStyle(document.body).backgroundColor,
+  }));
+  expect(paint).toEqual({ html: "rgb(25, 58, 63)", body: "rgb(25, 58, 63)" });
+  expect(look?.accent).toMatch(/^#[0-9a-f]{6}$/);
 
   await frame.getByTestId("path-manual").click();
   await frame.getByTestId(`option-route_quote-${USDC_BASE}`).click();
   await frame.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await frame.getByTestId("continue").click();
-  await expect(frame.getByTestId("merchant-name")).toHaveText("Acme GmbH");
+  await expect(frame.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await frame.getByTestId("simulate").click();
   await expect(frame.getByTestId("succeeded")).toBeVisible();
   await expect

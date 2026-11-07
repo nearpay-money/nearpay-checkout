@@ -1,7 +1,11 @@
-/** "Pay with wallet": EVM wallets announced through EIP-6963, and NEAR wallets through NEAR Connect. */
+/**
+ * "Pay your way" (choose_path) and "Connect a wallet" (connect_wallet): EVM wallets announced through
+ * EIP-6963 and NEAR wallets through NEAR Connect (lazy-loaded, §7 budget).
+ */
+import { Avatar, Button, Callout, LiveRegion } from "@nearpay-internal/ui";
 import { useEffect, useState } from "react";
 import { t } from "../../lib/i18n/t";
-import { Button, Notice, Spinner } from "../../ui/primitives";
+import { OptionButton, ScreenTitle } from "../../ui/blocks";
 import {
   type DiscoveredWallet,
   discoverInjectedWallets,
@@ -12,7 +16,53 @@ import {
 import { connectNearWallet, NearUnavailable, nearAvailable } from "../../wallets/near/connector";
 import type { WalletHandle } from "./wallets";
 
-export function WalletConnect({ onConnected }: { onConnected: (w: WalletHandle) => void }) {
+export function StartScreen({
+  embedded,
+  onWallet,
+  onManual,
+}: {
+  embedded: boolean;
+  onWallet: () => void;
+  onManual: () => void;
+}) {
+  return (
+    <section className="ck-screen" data-testid="choose-path" aria-labelledby="ck-start-title">
+      <ScreenTitle
+        id="ck-start-title"
+        title={embedded ? t("start.titleEmbed") : t("start.title")}
+        lede={embedded ? undefined : t("start.lede")}
+      />
+      <div className="np-stack">
+        <Button fullWidth onClick={onWallet} data-testid="path-wallet">
+          {t("start.wallet")}
+        </Button>
+        <Button fullWidth variant="secondary" onClick={onManual} data-testid="path-manual">
+          {embedded ? t("start.manualEmbed") : t("start.manual")}
+        </Button>
+      </div>
+      {embedded ? null : <Callout tone="info" title={t("start.noAccount")} reference={t("start.noAccountBody")} />}
+    </section>
+  );
+}
+
+function WalletAvatar({ icon, name }: { icon: string | null; name: string }) {
+  // Only `data:` icons are shown (CSP img-src 'self' data:); others fall back to the initial.
+  return icon ? (
+    <img className="ck-wallet-icon" src={icon} alt="" width={32} height={32} />
+  ) : (
+    <Avatar initial={name} size="sm" />
+  );
+}
+
+export function WalletConnect({
+  onConnected,
+  onCancel,
+  onManual,
+}: {
+  onConnected: (w: WalletHandle) => void;
+  onCancel: () => void;
+  onManual: () => void;
+}) {
   const [evm, setEvm] = useState<DiscoveredWallet[] | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +84,7 @@ export function WalletConnect({ onConnected }: { onConnected: (w: WalletHandle) 
 
   const connectEvm = async (w: DiscoveredWallet) => {
     setError(null);
-    setPending(w.info.name);
+    setPending(w.info.uuid);
     try {
       const address = await requestAccount(w.provider);
       onConnected({ family: "evm", address, label: w.info.name, provider: w.provider });
@@ -47,7 +97,7 @@ export function WalletConnect({ onConnected }: { onConnected: (w: WalletHandle) 
 
   const connectNear = async () => {
     setError(null);
-    setPending("NEAR");
+    setPending("near");
     try {
       const wallet = await connectNearWallet();
       onConnected({ family: "near", address: wallet.accountId, label: wallet.label, wallet });
@@ -58,53 +108,66 @@ export function WalletConnect({ onConnected }: { onConnected: (w: WalletHandle) 
     }
   };
 
+  const pendingName =
+    pending === "near" ? t("wallet.nearTitle") : (evm?.find((w) => w.info.uuid === pending)?.info.name ?? null);
+
   return (
-    <div className="np-wallets" data-testid="wallet-connect">
-      <h2 className="np-h2">{t("wallet.title")}</h2>
-      {pending ? <Spinner label={t("wallet.connecting", { wallet: pending })} /> : null}
-      {error ? <Notice kind="error">{error}</Notice> : null}
-      <h3 className="np-h3">{t("wallet.evm")}</h3>
-      {evm === null ? (
-        <Spinner label={t("wallet.searching")} />
-      ) : evm.length === 0 ? (
-        <p className="np-help" data-testid="no-evm-wallet">
+    <section className="ck-screen" data-testid="wallet-connect" aria-labelledby="ck-wallet-title">
+      <ScreenTitle id="ck-wallet-title" title={t("wallet.title")} lede={t("wallet.lede")} />
+      {error ? <Callout tone="danger" title={error} live data-testid="wallet-error" /> : null}
+      <LiveRegion>{pendingName ? t("wallet.connecting", { wallet: pendingName }) : ""}</LiveRegion>
+      <ul className="ck-list" aria-label={t("wallet.title")}>
+        {evm === null ? (
+          <li className="np-checkout__note">{t("wallet.searching")}</li>
+        ) : (
+          evm.map((w) => (
+            <li key={w.info.uuid}>
+              <OptionButton
+                avatar={<WalletAvatar icon={safeIcon(w.info.icon)} name={w.info.name} />}
+                title={t("wallet.walletSuffix", { name: w.info.name })}
+                description={
+                  pending === w.info.uuid ? t("wallet.connecting", { wallet: w.info.name }) : t("wallet.browserWallet")
+                }
+                pending={pending === w.info.uuid}
+                disabled={pending !== null && pending !== w.info.uuid}
+                onClick={() => void connectEvm(w)}
+                testId={`evm-wallet-${w.info.rdns}`}
+              />
+            </li>
+          ))
+        )}
+        {near ? (
+          <li>
+            <OptionButton
+              avatar="N"
+              title={t("wallet.nearTitle")}
+              description={pending === "near" ? t("wallet.connecting", { wallet: "NEAR" }) : t("wallet.nearHint")}
+              pending={pending === "near"}
+              disabled={pending !== null && pending !== "near"}
+              onClick={() => void connectNear()}
+              testId="near-connect"
+            />
+          </li>
+        ) : null}
+      </ul>
+      {evm !== null && evm.length === 0 ? (
+        <p className="np-checkout__note" data-testid="no-evm-wallet">
           {t("wallet.noneFound")}
         </p>
-      ) : (
-        <ul className="np-list">
-          {evm.map((w) => {
-            const icon = safeIcon(w.info.icon);
-            return (
-              <li key={w.info.uuid}>
-                <button
-                  type="button"
-                  className="np-wallet"
-                  onClick={() => void connectEvm(w)}
-                  disabled={pending !== null}
-                  data-testid={`evm-wallet-${w.info.rdns}`}
-                >
-                  {icon ? (
-                    <img src={icon} alt="" width={24} height={24} />
-                  ) : (
-                    <span className="np-chain-icon" aria-hidden="true" />
-                  )}
-                  <span>{w.info.name}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      <h3 className="np-h3">{t("wallet.near")}</h3>
-      {near ? (
-        <Button kind="secondary" onClick={() => void connectNear()} disabled={pending !== null} testId="near-connect">
-          {t("wallet.nearConnect")}
-        </Button>
-      ) : (
-        <p className="np-help" data-testid="near-unavailable">
+      ) : null}
+      {near ? null : (
+        <p className="np-checkout__note" data-testid="near-unavailable">
           {t("wallet.nearUnavailable")}
         </p>
       )}
-    </div>
+      <div className="np-stack">
+        <Button fullWidth variant="secondary" onClick={onCancel} data-testid="back">
+          {t("wallet.cancel")}
+        </Button>
+        <button type="button" className="np-link-button ck-center" onClick={onManual} data-testid="use-manual">
+          {t("wallet.useManual")}
+        </button>
+      </div>
+    </section>
   );
 }

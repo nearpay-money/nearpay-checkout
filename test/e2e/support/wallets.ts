@@ -1,9 +1,12 @@
 /** Injected test wallets: an EIP-6963 EVM provider and the e2e build's NEAR wallet hook. */
 import type { Page } from "@playwright/test";
 
-export async function injectEvmWallet(page: Page, opts: { chainId?: string; reject?: boolean } = {}): Promise<void> {
+export async function injectEvmWallet(
+  page: Page,
+  opts: { chainId?: string; reject?: boolean; sendError?: "reject" | "insufficient" | "hang" | null } = {},
+): Promise<void> {
   await page.addInitScript(
-    ({ chainId, reject }) => {
+    ({ chainId, reject, sendError }) => {
       const w = window as unknown as Record<string, unknown>;
       const calls: { method: string; params?: unknown }[] = [];
       w.__evmCalls = calls;
@@ -21,6 +24,10 @@ export async function injectEvmWallet(page: Page, opts: { chainId?: string; reje
               chain = (params as { chainId: string }[])[0]?.chainId ?? chain;
               return null;
             case "eth_sendTransaction":
+              if (sendError === "hang") return new Promise(() => undefined);
+              if (sendError === "reject") throw Object.assign(new Error("User rejected"), { code: 4001 });
+              if (sendError === "insufficient")
+                throw Object.assign(new Error("insufficient funds for gas * price + value"), { code: -32000 });
               return `0x${"ab".repeat(32)}`;
             case "personal_sign":
               return `0x${"11".repeat(64)}1b`;
@@ -42,7 +49,7 @@ export async function injectEvmWallet(page: Page, opts: { chainId?: string; reje
       window.addEventListener("eip6963:requestProvider", announce);
       announce();
     },
-    { chainId: opts.chainId ?? "0x1", reject: opts.reject ?? false },
+    { chainId: opts.chainId ?? "0x1", reject: opts.reject ?? false, sendError: opts.sendError ?? null },
   );
 }
 

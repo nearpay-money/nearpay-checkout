@@ -165,7 +165,11 @@ describe("routes", () => {
       secret: null,
     });
     expect(parseRoute("/c/cs_bad", `#${secret}`)).toMatchObject({ secret: null });
-    expect(parseRoute("/l/plink_1", "")).toEqual({ kind: "payment_link", id: "plink_1" });
+    expect(parseRoute("/l/plink_1", "")).toEqual({ kind: "not_found" }); // ids are validated (Stage 2)
+    expect(parseRoute("/l/plink_01jbz9k3m4n5p6q7r8s9t0v1w2", "")).toEqual({
+      kind: "payment_link",
+      id: "plink_01jbz9k3m4n5p6q7r8s9t0v1w2",
+    });
     expect(parseRoute("/i/in_1", "")).toEqual({ kind: "invoice", id: "in_1" });
     expect(parseRoute("/", "")).toEqual({ kind: "not_found" });
   });
@@ -290,8 +294,8 @@ describe("payment options per path", () => {
 
 describe("i18n", () => {
   it("substitutes placeholders and falls back", () => {
-    expect(t("deposit.network", { chain: "Base" })).toBe("Send only on Base");
-    expect(t("deposit.network")).toBe("Send only on {chain}");
+    expect(t("deposit.networkTitle", { chain: "Base" })).toBe("Use the Base network");
+    expect(t("deposit.networkTitle")).toBe("Use the {chain} network");
     expect(errorText("too_many_attempts")).toMatch(/Too many/);
     expect(errorText("never_heard_of_it")).toBe(t("error.generic"));
     expect(hasMessage("app.title")).toBe(true);

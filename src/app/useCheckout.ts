@@ -16,12 +16,13 @@ import {
 } from "@nearpay/spec";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { config } from "../config";
-import { payableOptions } from "../features/asset-picker/options";
+import { optionKey, payableOptions } from "../features/asset-picker/options";
 import { openStatusStream } from "../features/status-stream/stream";
 import type { WalletHandle } from "../features/wallet-connect/wallets";
 import { call, isApiError } from "../lib/api/client";
 import { NEAR_MAINNET, walletAsset } from "../lib/chains/chains";
-import { verifyAttestation } from "../lib/integrity/verify";
+import { type VerifiedInstructions, verifyAttestation } from "../lib/integrity/verify";
+import { type AssetMeta, assetMeta, paidAssetId, totalToSend } from "../lib/money/display";
 import { ensureChain, personalSign, sendTransaction, WalletRejected } from "../wallets/evm/provider";
 import { evmPaymentTx } from "../wallets/evm/tx";
 import {
@@ -43,6 +44,7 @@ import {
   reducer,
   type State,
 } from "./machine";
+import { INSUFFICIENT_FUNDS } from "./screens";
 
 export interface CheckoutParams {
   readonly sessionId: string;
@@ -61,6 +63,12 @@ export interface CheckoutActions {
   simulate(): Promise<void>;
   retry(): void;
   back(): void;
+  /** "Change" on the review screen: pick another token or network. */
+  change(): void;
+  /** "Send from another wallet" from the wallet path. */
+  useManual(): void;
+  /** "Check status": reload the session now (the stream keeps running). */
+  refresh(): Promise<void>;
   block(reason: BlockReason): void;
   clearError(): void;
 }
@@ -70,13 +78,30 @@ export interface Checkout {
   readonly actions: CheckoutActions;
   readonly busy: boolean;
   readonly streamMode: "sse" | "polling" | null;
-  /** Decimals/symbol of the attempt's origin asset (from the payment options). */
+  /** The payment option of the attempt's origin asset (from the payment options). */
   readonly originMeta: Option | null;
+  /** Decimals/symbol of the paid asset: attested (`Attestation.asset`) when present, else from the options. */
+  readonly assetMeta: AssetMeta | null;
+  /**
+   * The last verified attestation of this page load. It stays after the instructions are hidden so the
+   * attested merchant name and destination keep being shown on the status screens (never the
+   * unverified display name, L-CK-03).
+   */
+  readonly trusted: VerifiedInstructions | null;
+  /** Wallet re-quote: total of the expired quote when the new one differs (base units, same asset). */
+  readonly previousTotal: string | null;
+  /** Option of the expired wallet quote, re-selected automatically after "Get a new quote". */
+  readonly requoteKey: string | null;
 }
 
 function errorCode(e: unknown): string {
   if (e instanceof WalletRejected) return "wallet_rejected";
-  if (isApiError(e)) return e.code;
+  if (isApiError(e)) return e.code === "insufficient_balance" ? INSUFFICIENT_FUNDS : e.code;
+  // Wallets report a short balance as an RPC error ("insufficient funds for gas * price + value",
+  // "Not enough balance", NEAR "NotEnoughBalance").
+  if (e instanceof Error && /insufficient (funds|balance)|not ?enough ?balance/i.test(e.message)) {
+    return INSUFFICIENT_FUNDS;
+  }
   return "generic";
 }
 
@@ -85,6 +110,11 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
   const [busy, setBusy] = useState(false);
   const [streamMode, setStreamMode] = useState<"sse" | "polling" | null>(null);
   const [originMeta, setOriginMeta] = useState<Option | null>(null);
+  const [trusted, setTrusted] = useState<VerifiedInstructions | null>(null);
+  const [previousTotal, setPreviousTotal] = useState<string | null>(null);
+  const [requoteKey, setRequoteKey] = useState<string | null>(null);
+  /** The wallet quote that was on screen when it expired (option key + total). */
+  const lastQuote = useRef<{ key: string; total: string; asset: string } | null>(null);
   const wallet = useRef<WalletHandle | null>(null);
   const verifying = useRef<string | null>(null);
   const sessionLoaded = state.session !== null;
@@ -211,6 +241,23 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       });
   }, [phase, attempt]);
 
+  // ---- attested display data + wallet re-quote ------------------------------------------------------
+  const verified = state.verified;
+  useEffect(() => {
+    if (!verified) return;
+    setTrusted(verified);
+    if (state.path !== "wallet" || !state.option) return;
+    const total = totalToSend(verified.attestation);
+    const asset = paidAssetId(verified.attestation);
+    const key = optionKey(state.option);
+    const prev = lastQuote.current;
+    setPreviousTotal(
+      prev && total && asset && prev.key === key && prev.asset === asset && prev.total !== total ? prev.total : null,
+    );
+    setRequoteKey(null);
+    if (total && asset) lastQuote.current = { key, total, asset };
+  }, [verified, state.path, state.option]);
+
   // ---- deposit deadline ---------------------------------------------------------------------------
   const validUntil = state.verified?.validUntil ?? null;
   useEffect(() => {
@@ -287,7 +334,10 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       const att = v.attestation;
       if (att.kind === "route_quote" && att.deposit) {
         const d = att.deposit;
-        const asset = walletAsset(d.origin_asset_id, d.chain);
+        // The recipe comes from the attested asset id; the option's typed token (CR-15-06) is used only
+        // when it describes the same attested asset and chain (never for another asset).
+        const meta = optionFor(state.option, originMeta, d.origin_asset_id, d.chain);
+        const asset = walletAsset(d.origin_asset_id, d.chain, meta?.token);
         if (!asset) throw new Error("This asset can't be paid from a wallet here.");
         let txHash: string;
         if (w.family === "evm" && (asset.kind === "evm_erc20" || asset.kind === "evm_native")) {
@@ -345,7 +395,7 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     } finally {
       setBusy(false);
     }
-  }, [state, sessionId, secret]);
+  }, [state, sessionId, secret, originMeta]);
 
   const signalSent = useCallback(async () => {
     const a = state.attempt;
@@ -386,7 +436,24 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     payWithWallet,
     signalSent,
     simulate,
-    retry: () => dispatch({ type: "retry" }),
+    retry: () => {
+      // Wallet path "Get a new quote": re-select the same option and ask the payer to review any change.
+      const q = lastQuote.current;
+      setRequoteKey(state.path === "wallet" && state.phase === "expired_address" && q ? q.key : null);
+      dispatch({ type: "retry" });
+    },
+    change: () => {
+      lastQuote.current = null;
+      setPreviousTotal(null);
+      dispatch({ type: "change" });
+    },
+    useManual: () => {
+      wallet.current = null;
+      lastQuote.current = null;
+      setPreviousTotal(null);
+      dispatch({ type: "use_manual" });
+    },
+    refresh: reload,
     back: () => {
       wallet.current = null;
       dispatch({ type: "back" });
@@ -395,5 +462,24 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     clearError: () => dispatch({ type: "error", error: null }),
   };
 
-  return { state, actions, busy, streamMode, originMeta };
+  const attestation = state.verified?.attestation ?? trusted?.attestation ?? null;
+  const paid = attestation ? paidAssetId(attestation) : (state.attempt?.origin_asset_id ?? null);
+  const meta = paid ? assetMeta(paid, attestation, [state.option, originMeta]) : null;
+  return {
+    state,
+    actions,
+    busy,
+    streamMode,
+    originMeta,
+    assetMeta: meta,
+    trusted,
+    previousTotal: state.phase === "pay_wallet" ? previousTotal : null,
+    requoteKey,
+  };
+}
+
+/** The payment option describing exactly `assetId` on `chain` (selected one first). */
+function optionFor(selected: Option | null, origin: Option | null, assetId: string, chain: string): Option | null {
+  for (const o of [selected, origin]) if (o && o.origin_asset_id === assetId && o.chain === chain) return o;
+  return null;
 }

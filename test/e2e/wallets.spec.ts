@@ -19,8 +19,7 @@ test("EVM wallet (live): switches to Base and sends the attested ERC-20 transfer
   await expect(page.getByTestId(`option-intents_transfer-${USDC_NEAR}`)).toBeVisible();
   await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
   await expect(page.getByTestId("refund-address")).toHaveCount(0);
-  await page.getByTestId("continue").click();
-  await expect(page.getByTestId("merchant-name")).toHaveText("Acme GmbH");
+  await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await expect(page.getByTestId("wallet-pay")).toContainText("Your wallet will switch to Base.");
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
@@ -56,7 +55,6 @@ test("EVM wallet in test mode never broadcasts: simulate instead", async ({ page
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("evm-wallet-test.mockwallet").click();
   await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
-  await page.getByTestId("continue").click();
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   await page.getByTestId("simulate").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
@@ -96,8 +94,7 @@ test("NEAR wallet (live): registers storage and ft_transfers the attested amount
   await expect(page.getByTestId("connected-wallet")).toContainText("payer.near");
   await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`)).toHaveCount(0);
   await page.getByTestId(`option-route_quote-${USDC_NEAR}`).click();
-  await page.getByTestId("continue").click();
-  await expect(page.getByTestId("merchant-name")).toHaveText("Acme GmbH");
+  await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
   expect(rpc.sort()).toEqual(["storage_balance_bounds", "storage_balance_of"]);
@@ -123,8 +120,7 @@ test("NEAR Intents balance (live): signs the attested requirement with NEP-413",
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
   await page.getByTestId(`option-intents_transfer-${USDC_NEAR}`).click();
-  await page.getByTestId("continue").click();
-  await expect(page.getByTestId("wallet-pay")).toContainText("Sign transfer of 2.006 USDC");
+  await expect(page.getByTestId("wallet-pay")).toContainText("Pay 2.006 USDC");
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
   expect(rpc).toEqual(["current_salt"]);
@@ -153,7 +149,6 @@ test("EVM Intents balance (live): ERC-191 personal_sign from the eth-implicit ac
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("evm-wallet-test.mockwallet").click();
   await page.getByTestId(`option-intents_transfer-${USDC_NEAR}`).click();
-  await page.getByTestId("continue").click();
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
   expect(mock.bodyOf("createPaymentAttempt").payer_wallet).toBe("0x42e06263bb5346ae6421ab1ec1019824e7b284e1");
@@ -169,7 +164,6 @@ test("a tampered Intents requirement is refused before any signature is requeste
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
   await page.getByTestId(`option-intents_transfer-${USDC_NEAR}`).click();
-  await page.getByTestId("continue").click();
   await expect(page.getByTestId("verify-failed")).toBeVisible();
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __nearCalls: unknown[] }).__nearCalls.length)).toBe(0);

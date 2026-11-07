@@ -8,7 +8,9 @@
  *  3. the attestation is about this attempt (`attempt_id`, `livemode`, `kind`);
  *  4. every field checkout would display equals the attested field (address, memo, chain, origin asset,
  *     amount_in, deadline — or pay_to, token, amount, fee_to, fee_amount, binding, deadline);
- *  5. it has not expired, and `expires_at` is not after the deadline.
+ *  5. it has not expired, and `expires_at` is not after the deadline;
+ *  6. when sentinel attests the asset's display data (`asset`, spec 0.2.0 CR-15-07), its `asset_id` is the
+ *     asset being paid (`deposit.origin_asset_id` / `requirement.token`).
  * The UI then renders the ATTESTED values (merchant name, KYB badge, destination fingerprint and the
  * instructions themselves), never the payments copy. Any failure → no address, no wallet prompt.
  */
@@ -123,6 +125,7 @@ export function verifyAttestation(
       return fail("field_mismatch", "origin_asset_id");
     if (att.amount_in !== shown.amount_in) return fail("field_mismatch", "amount_in");
     if (!sameInstant(att.deadline, shown.deadline)) return fail("field_mismatch", "deadline");
+    if (a.asset && a.asset.asset_id !== att.origin_asset_id) return fail("field_mismatch", "asset");
     deadline = att.deadline;
   } else {
     const shown = attempt.intents_requirement;
@@ -132,6 +135,7 @@ export function verifyAttestation(
       if (att[f] !== shown[f]) return fail("field_mismatch", f);
     }
     if (!sameInstant(att.deadline, shown.deadline)) return fail("field_mismatch", "deadline");
+    if (a.asset && a.asset.asset_id !== att.token) return fail("field_mismatch", "asset");
     deadline = att.deadline;
   }
 

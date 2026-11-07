@@ -27,7 +27,8 @@ This repo stays surgical: design docs live in [`nearpay-brain`](../nearpay-brain
 |---|---|
 | `/c/:cs_id#<client_secret>` | hosted checkout (never framed) |
 | `/embed/:cs_id#<client_secret>` | embedded checkout, framed by `nearpay-js`; accepts `np:init` only from `allowed_origins` |
-| `/l/:id`, `/i/:id` | payment links (Stage 2) and hosted invoices (Stage 3): "not available yet" |
+| `/l/:id` | payment link (Stage 2): anonymous link page → `createPaymentLinkSession` → continues as `/c/:id#<client_secret>` |
+| `/i/:id` | hosted invoices (Stage 3): "not available yet" |
 
 The client secret stays in the URL fragment and in memory; it is sent only as `X-NearPay-Client-Secret`.
 
@@ -49,6 +50,7 @@ Build-time constants (everything ends up in the public bundle — nothing secret
 | `VITE_NEAR_NETWORK` | `mainnet` | NEAR Connect network |
 | `VITE_NEAR_RPC_URL` | `https://free.rpc.fastnear.com` | NEAR view calls (storage registration, Verifier salt) |
 | `VITE_WALLETCONNECT_PROJECT_ID` | empty | reserved; WalletConnect is not wired yet |
+| `VITE_WEB_URL` | `https://nearpay.money` | site origin for the footer links (Help · Privacy · Terms) |
 
 `index.html` carries the CSP as a meta tag (`frame-ancestors` comes from the static server per route).
 It contains the placeholder `{{NP_CSP_NONCE}}` (also in `<meta name="np-csp-nonce">`): the static
@@ -72,14 +74,19 @@ spec's test-vector key (pinned only in the e2e build).
 
 ## Status
 
+Step 2.3: every screen rebuilt on `@nearpay-internal/ui` to the owner's Figma checkout canvas (phase →
+frame mapping in `src/app/screens.ts`), payment links, spec 0.2.0 fields (`PaymentOption.token`,
+`Attestation.asset`). Screenshot tour: `NP_SHOTS=<dir> pnpm exec playwright test screens` (after
+`pnpm build:e2e`).
+
 Stage 1 (step 1.3): hosted + embedded checkout, manual path, EVM (EIP-6963) and NEAR (NEAR Connect)
 wallets, Intents-balance signing (NEP-413 / ERC-191), sentinel verification, live status (SSE +
-polling), test mode. Payment links (Stage 2), hosted invoices (Stage 3), Solana wallets (Stage 4)
-and WalletConnect are not built yet.
+polling), test mode. Hosted invoices (Stage 3), Solana wallets (Stage 4) and WalletConnect are not
+built yet.
 
 ## Built with
 
-Vite, React, TypeScript, zod + `@nearpay/spec`, `@noble/curves` / `@noble/hashes` (Ed25519, SHA-256,
+Vite, React, TypeScript, `@nearpay-internal/ui` (NearPay design system, DM Sans self-hosted), zod + `@nearpay/spec`, `@noble/curves` / `@noble/hashes` (Ed25519, SHA-256,
 keccak), `canonicalize` (RFC 8785), `bs58`, `uqr` (QR codes), `@hot-labs/near-connect` (NEAR wallets,
 lazy-loaded), Cloudflare Turnstile (runtime script), Vitest, Playwright, Biome. Code and documentation
 are written with AI assistance (Claude) under human direction and review.

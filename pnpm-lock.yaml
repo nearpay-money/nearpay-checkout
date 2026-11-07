@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  "@nearpay/spec": 0.1.5
+  "@nearpay/spec": 0.2.0
 
 importers:
   .:
@@ -13,9 +13,12 @@ importers:
       "@hot-labs/near-connect":
         specifier: 0.11.4
         version: 0.11.4
+      "@nearpay-internal/ui":
+        specifier: 0.2.0
+        version: 0.2.0(react@19.1.10)
       "@nearpay/spec":
-        specifier: 0.1.5
-        version: 0.1.5(zod@4.6.7)
+        specifier: 0.2.0
+        version: 0.2.0(zod@4.6.7)
       "@noble/curves":
         specifier: 2.4.0
         version: 2.4.0
@@ -337,6 +340,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  "@fontsource-variable/dm-sans@5.3.0":
+    resolution:
+      { integrity: sha512-BpUG5bqePiDFMBM4ZtLSlPdAIOM990uB1dlXzIf4aw21yQR7BmykedLXXXMqGWsR18aMLOsbWccwJNh3ztTQaA== }
+
   "@hot-labs/near-connect@0.11.4":
     resolution:
       { integrity: sha512-exAL1gqysyCHewcMO334YJ3ddTPg3j9EyVM9novz5Jx4fLbG/YSYBlkYMjMNB8E9K/4I7BiemjOw9bQ+h80hEA== }
@@ -368,9 +375,16 @@ packages:
     resolution:
       { integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw== }
 
-  "@nearpay/spec@0.1.5":
+  "@nearpay-internal/ui@0.2.0":
     resolution:
-      { integrity: sha512-u6/g6kr3W7XbfCeE5x00vCwn1qw1W/Zk+4zzfDgnoT3Bn/shjAihYzlP2RQocJE3zuD6vlv7VvY3JAzpw1J3Mw== }
+      { integrity: sha512-iIwz6XmUIr7tbJFnEVx+N2aq+71oOuMylh9QvhOzVwdPnQMUVAVRNbscKUdDVE2EKawPZbnkA76mdQ3il9P+JQ== }
+    engines: { node: ">=22.11.0" }
+    peerDependencies:
+      react: ^19.0.0
+
+  "@nearpay/spec@0.2.0":
+    resolution:
+      { integrity: sha512-4uRsEShhgzozqpG/n+lxWQphV+Yo8L/31KNvD6o+ylIbR+yzmADxR0FVd0wa3DEG/G9Ao8IbHm3oEh24BLESQA== }
     engines: { node: ">=22.11.0" }
     peerDependencies:
       zod: ^4.6.7
@@ -1250,6 +1264,8 @@ snapshots:
   "@esbuild/win32-x64@0.21.5":
     optional: true
 
+  "@fontsource-variable/dm-sans@5.3.0": {}
+
   "@hot-labs/near-connect@0.11.4": {}
 
   "@isaacs/cliui@8.0.2":
@@ -1277,7 +1293,12 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.6.0
 
-  "@nearpay/spec@0.1.5(zod@4.6.7)":
+  "@nearpay-internal/ui@0.2.0(react@19.1.10)":
+    dependencies:
+      "@fontsource-variable/dm-sans": 5.3.0
+      react: 19.1.10
+
+  "@nearpay/spec@0.2.0(zod@4.6.7)":
     dependencies:
       zod: 4.6.7
 

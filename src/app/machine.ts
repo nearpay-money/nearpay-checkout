@@ -66,6 +66,8 @@ export interface State {
   readonly option: Option | null;
   /** A newer attempt replaced one whose instructions were shown ("don't send again"). */
   readonly replacedAttempt: boolean;
+  /** The current attempt was seen with a deposit in flight in this page load (failures then mean "being returned"). */
+  readonly depositSeen: boolean;
   readonly error: UiError | null;
 }
 
@@ -85,6 +87,8 @@ export type Event =
   | { readonly type: "deadline_passed" }
   | { readonly type: "retry" }
   | { readonly type: "back" }
+  | { readonly type: "change" }
+  | { readonly type: "use_manual" }
   | { readonly type: "error"; readonly error: UiError | null }
   | { readonly type: "stream_session"; readonly session: SessionSnapshot }
   | { readonly type: "stream_attempt"; readonly attempt: AttemptSnapshot }
@@ -103,6 +107,7 @@ export const initialState: State = {
   options: null,
   option: null,
   replacedAttempt: false,
+  depositSeen: false,
   error: null,
 };
 
@@ -111,6 +116,8 @@ const FAILED = new Set(["refunded", "failed"]);
 /** Phases in which instructions are on screen (or about to be). */
 const SHOWING = new Set<Phase>(["verifying", "pay_wallet", "pay_manual", "needs_top_up"]);
 const FINAL = new Set<Phase>(["succeeded", "blocked"]);
+/** Attempt statuses that mean the payer's funds reached the route. */
+const DEPOSITED = new Set(["deposit_detected", "incomplete_deposit", "settling", "verifying", "held", "succeeded"]);
 
 /** Instructions still live on an attempt (deposit or requirement, with a sentinel ticket). */
 export function hasLiveInstructions(a: AttemptSnapshot | null): boolean {
@@ -125,7 +132,13 @@ function block(s: State, reason: BlockReason): State {
 
 /** Where a freshly loaded session resumes (reload, second tab, deep link). */
 export function resume(s: State, session: SessionSnapshot): State {
-  const base: State = { ...s, session, attempt: session.attempt, error: null };
+  const base: State = {
+    ...s,
+    session,
+    attempt: session.attempt,
+    depositSeen: session.attempt !== null && DEPOSITED.has(session.attempt.status),
+    error: null,
+  };
   if (session.intent_status === "succeeded" || session.status === "complete") {
     return session.intent_status === "requires_review" ? { ...base, phase: "review" } : { ...base, phase: "succeeded" };
   }
@@ -147,7 +160,7 @@ export function resume(s: State, session: SessionSnapshot): State {
 
 function applyAttempt(s: State, a: AttemptSnapshot): State {
   if (!s.attempt || a.id !== s.attempt.id) return s;
-  const next: State = { ...s, attempt: a };
+  const next: State = { ...s, attempt: a, depositSeen: s.depositSeen || DEPOSITED.has(a.status) };
   if (FINAL.has(s.phase) || s.phase === "review") return next;
   if (!a.visible && SHOWING.has(s.phase)) return { ...next, phase: "expired_address", verified: null };
   if (a.status === "held") return { ...next, phase: "review" };
@@ -228,7 +241,14 @@ export function reducer(s: State, e: Event): State {
     case "attempt_created": {
       if (s.phase !== "confirming") return s;
       const replaced = s.attempt !== null && s.attempt.id !== e.attempt.id;
-      const next: State = { ...s, attempt: e.attempt, verified: null, verifyFailure: null, replacedAttempt: replaced };
+      const next: State = {
+        ...s,
+        attempt: e.attempt,
+        verified: null,
+        verifyFailure: null,
+        replacedAttempt: replaced,
+        depositSeen: DEPOSITED.has(e.attempt.status),
+      };
       return hasLiveInstructions(e.attempt) ? { ...next, phase: "verifying" } : next;
     }
     case "attempt_failed":
@@ -274,6 +294,27 @@ export function reducer(s: State, e: Event): State {
         return { ...s, phase: "choose_path", path: null, option: null, options: null, error: null };
       }
       return s;
+    case "change":
+      // "Change" on the review screen: hide the verified instructions and pick again. Creating the next
+      // attempt hides this one server-side and shows the "don't send again" notice (§5.7).
+      if (s.phase !== "pay_wallet" && s.phase !== "verify_failed") return s;
+      if (s.session?.status !== "open") return block(s, "session_expired");
+      return { ...s, phase: "choose_asset", verified: null, verifyFailure: null, option: null, error: null };
+    case "use_manual":
+      // "Send from another wallet" from the wallet path (desktop review, wallet list).
+      if (!["connect_wallet", "choose_asset", "pay_wallet"].includes(s.phase) || s.path !== "wallet") return s;
+      if (s.session?.status !== "open") return block(s, "session_expired");
+      return {
+        ...s,
+        phase: "choose_asset",
+        path: "manual",
+        wallet: null,
+        options: null,
+        option: null,
+        verified: null,
+        verifyFailure: null,
+        error: null,
+      };
     case "error":
       return { ...s, error: e.error };
     case "stream_session":
