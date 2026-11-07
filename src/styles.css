@@ -4,15 +4,24 @@
  * styles anywhere (CSP style-src 'self' 'nonce-…').
  */
 
+/*
+ * The theme background covers the whole viewport (short screens, phone toolbars): <html> is the theme
+ * root (class np-root + data-theme, merchant appearance applied by applyAppearance), so the tokens
+ * below follow light / dark / auto and the embedded merchant theme.
+ */
 html,
 body,
 #root {
-  min-height: 100%;
+  min-height: 100dvh;
   margin: 0;
 }
 
-html {
+html,
+body {
   background: var(--np-color-surface);
+}
+
+html {
   color-scheme: light;
 }
 
@@ -26,32 +35,26 @@ html[data-theme="dark"] {
   }
 }
 
-body {
-  background: var(--np-color-surface);
+#root {
+  display: flex;
+  flex-direction: column;
 }
 
-/* Desktop canvas behind the checkout card (a container query cannot style its own container). */
+#root > .np-checkout {
+  flex: 1 0 auto;
+}
+
+/* Desktop hosted pages sit on the canvas colour (a container query cannot style its own container). */
 @media (min-width: 880px) {
+  html:not([data-embedded]),
+  html:not([data-embedded]) body,
   .ck-frame.np-checkout--page {
     background: var(--np-color-bg);
   }
 }
 
-@media (min-width: 880px) {
-  html:not([data-embedded]),
-  html:not([data-embedded]) body {
-    background: var(--np-color-bg);
-  }
-}
-
-/* Embedded: transparent page; the merchant page frames the card. */
-html[data-embedded],
-html[data-embedded] body {
-  background: transparent;
-}
-
 .ck-frame {
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .ck-frame .np-checkout__inner {

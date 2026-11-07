@@ -175,8 +175,19 @@ test("dark theme and desktop two-column review", async ({ page, mock }) => {
   await toReview(page);
   await expect(page.locator(".np-checkout--with-summary")).toBeVisible();
   await expect(page.getByTestId("use-manual")).toBeVisible();
-  const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(bg).not.toBe("rgb(255, 255, 255)");
+  // The theme background covers the whole viewport: desktop canvas (#102c30) on html and body…
+  const bgs = () =>
+    page.evaluate(() => ({
+      html: getComputedStyle(document.documentElement).backgroundColor,
+      body: getComputedStyle(document.body).backgroundColor,
+      bottom: document.elementFromPoint(5, window.innerHeight - 2)?.closest("html") !== null,
+      covers: document.documentElement.getBoundingClientRect().height >= window.innerHeight,
+    }));
+  expect(await bgs()).toEqual({ html: "rgb(16, 44, 48)", body: "rgb(16, 44, 48)", bottom: true, covers: true });
+  // …and the dark surface (#193a3f) on phones.
+  await page.setViewportSize({ width: 390, height: 1400 });
+  expect(await bgs()).toMatchObject({ html: "rgb(25, 58, 63)", body: "rgb(25, 58, 63)", covers: true });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByTestId("use-manual").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();
 });
