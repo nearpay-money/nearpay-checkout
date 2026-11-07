@@ -4,7 +4,7 @@
  * `allowed_origins` — is known, then accepts `np:init` only per §5.3 and from then on posts every
  * message to that one verified origin.
  */
-import { type Appearance, envelope, type InitMessage, initAccepted, type OutboundMessage, parseInit } from "./protocol";
+import { envelope, type InitMessage, initAccepted, type OutboundMessage, parseInit } from "./protocol";
 
 interface Pending {
   readonly origin: string;
@@ -73,11 +73,4 @@ export function installBridge(win: Window, timeoutMs = 10_000): Bridge {
       if (parentOrigin) win.parent.postMessage(envelope(m), parentOrigin);
     },
   };
-}
-
-/** Applies the merchant's appearance through CSS custom properties (CSSOM; allowed by the CSP). */
-export function applyAppearance(root: HTMLElement, a: Appearance): void {
-  if (a.theme !== "auto") root.dataset.theme = a.theme;
-  if (a.accent) root.style.setProperty("--np-accent", a.accent);
-  if (a.radius !== null) root.style.setProperty("--np-radius", `${a.radius}px`);
 }

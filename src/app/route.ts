@@ -7,13 +7,14 @@ export type Route =
   | { readonly kind: "not_found" };
 
 const CS_RE = idPattern("cs");
+const PLINK_RE = idPattern("plink");
 const secretSchema = ClientSecretHeaders.shape["x-nearpay-client-secret"];
 
 export function parseRoute(pathname: string, hash: string): Route {
   const m = /^\/(c|embed|l|i)\/([^/]+)\/?$/.exec(pathname);
   if (!m) return { kind: "not_found" };
   const [, kind, id] = m as unknown as [string, string, string];
-  if (kind === "l") return { kind: "payment_link", id };
+  if (kind === "l") return PLINK_RE.test(id) ? { kind: "payment_link", id } : { kind: "not_found" };
   if (kind === "i") return { kind: "invoice", id };
   const secret = hash.startsWith("#") ? hash.slice(1) : hash;
   const valid = CS_RE.test(id) && secretSchema.safeParse(secret).success && secret.startsWith(`${id}_secret_`);
@@ -41,4 +42,13 @@ export function safeHttpUrl(url: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Hosted URL of a session opened from a payment link (`PaymentLinkSession`): the secret must belong to
+ * that session, exactly as `/c/:id#<secret>` links are checked. Returns null otherwise.
+ */
+export function linkSessionPath(sessionId: string, secret: string): string | null {
+  const r = parseRoute(`/c/${sessionId}`, `#${secret}`);
+  return r.kind === "hosted" && r.secret ? `/c/${sessionId}#${secret}` : null;
 }

@@ -23,6 +23,7 @@ export default defineConfig({
         "src/lib/**/*.ts",
         "src/app/machine.ts",
         "src/app/route.ts",
+        "src/app/screens.ts",
         "src/features/refund-address/validate.ts",
         "src/features/deposit-instructions/qr.ts",
         "src/features/asset-picker/options.ts",

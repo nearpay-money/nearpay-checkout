@@ -20,3 +20,20 @@ export function cspNonce(doc: Document = document): string | null {
   const v = doc.querySelector('meta[name="np-csp-nonce"]')?.getAttribute("content") ?? "";
   return /^[A-Za-z0-9+/_-]{16,}={0,2}$/.test(v) ? v : null;
 }
+
+/**
+ * NearPay site links in the hosted checkout footer (Help · Privacy · Terms). `VITE_WEB_URL` overrides the
+ * production site (local stack: `https://nearpay.localhost`); only https (or http on localhost) origins.
+ */
+function webOrigin(raw: string | undefined): string {
+  try {
+    const u = new URL(raw ?? "");
+    if (u.protocol === "https:" || (u.protocol === "http:" && /(^|\.)localhost$/.test(u.hostname))) return u.origin;
+  } catch {
+    /* default below */
+  }
+  return "https://nearpay.money";
+}
+
+const WEB = webOrigin(import.meta.env.VITE_WEB_URL as string | undefined);
+export const webLinks = Object.freeze({ help: `${WEB}/support`, privacy: `${WEB}/privacy`, terms: `${WEB}/terms` });

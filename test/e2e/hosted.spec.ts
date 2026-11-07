@@ -19,7 +19,7 @@ test("manual path in test mode: verified merchant, guarded address, simulate, su
 }) => {
   const s = mock.create({}, { autoSucceed: true });
   await page.goto(mock.url(s));
-  await expect(page.getByTestId("test-banner")).toHaveText("Test mode — no real funds");
+  await expect(page.getByTestId("test-banner")).toContainText("Test mode — no real funds");
   await expect(page.getByTestId("description")).toHaveText("Pro plan");
   // The unverified merchant name from payments is never rendered (L-CK-03).
   await expect(page.getByText("Acme (unverified)")).toHaveCount(0);
@@ -28,9 +28,7 @@ test("manual path in test mode: verified merchant, guarded address, simulate, su
   await expect(page.getByTestId("option-route_quote-nep141:eth.omft.near")).toContainText("Too slow");
   await expect(page.getByTestId(`option-intents_transfer-${USDC_NEAR}`)).toHaveCount(0);
   await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
-  await expect(page.getByTestId("refund-warning")).toHaveText(
-    "Use a wallet you control, not an exchange deposit address.",
-  );
+  await expect(page.getByTestId("refund-warning")).toContainText("Do not use an exchange deposit address.");
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169Ee7");
   await page.getByTestId("refund-address").blur();
   await expect(page.getByTestId("refund-error")).toContainText("checksum");
@@ -38,18 +36,26 @@ test("manual path in test mode: verified merchant, guarded address, simulate, su
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
 
+  // Attested merchant in the header; "Payment details" sheet with the reviewed badge and fingerprint.
+  await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
+  await page.getByTestId("payment-details").click();
+  await expect(page.getByRole("dialog", { name: "Payment details" })).toBeVisible();
   await expect(page.getByTestId("merchant-name")).toHaveText("Acme GmbH");
-  await expect(page.getByTestId("kyb")).toHaveText("Verified business");
+  await expect(page.getByTestId("kyb")).toHaveText("Business details reviewed by NearPay");
   await expect(page.getByTestId("fingerprint")).toHaveText("YZMN-R81Z-BR");
-  await expect(page.getByTestId("network")).toHaveText(/Send only on Base/);
+  await expect(page.getByTestId("destination")).toHaveText("USDC · NEAR");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText(/verified identity|Verified business/i)).toHaveCount(0);
+  await expect(page.getByTestId("network")).toContainText("Use the Base network");
   // Address and amount stay hidden until the payer confirms the network.
   await expect(page.getByTestId("deposit-address")).toHaveCount(0);
   await expect(page.getByTestId("sent")).toBeDisabled();
   await page.getByTestId("confirm-network").check();
-  await expect(page.getByTestId("deposit-address")).toHaveText("0x76b4c56085ed136a8744d52be956396624a730e8");
+  await expect(page.getByTestId("deposit-address")).toContainText("0x76b4c56085ed136a8744d52be956396624a730e8");
   await expect(page.getByTestId("amount-in")).toHaveText("2.005013 USDC");
   await expect(page.getByTestId("qr")).toBeVisible();
-  await expect(page.getByTestId("countdown")).toContainText("Send within 1");
+  await expect(page.getByTestId("countdown")).toContainText("Expires in 1");
 
   const created = mock.callsTo("createPaymentAttempt")[0]?.body as Record<string, string>;
   expect(created).toMatchObject({
@@ -75,7 +81,7 @@ test("I've sent it signals the deposit and waits for detection", async ({ page, 
   await expect(page.getByTestId("processing")).toBeVisible();
   expect(mock.callsTo("signalDepositSent")).toHaveLength(1);
   mock.setAttempt(s, { status: "deposit_detected", attestation_ticket: null });
-  await expect(page.getByTestId("processing")).toContainText("confirming it on-chain");
+  await expect(page.getByTestId("processing")).toContainText("Keep this page open while we confirm it");
   mock.succeed(s);
   await expect(page.getByTestId("succeeded")).toBeVisible();
 });
@@ -113,13 +119,14 @@ for (const mode of [
     expect(html).not.toContain("0x76b4c56085ed136a8744d52be956396624a730e8");
     expect(html).not.toContain("0x0000000000000000000000000000000000000bad");
     await expect(page.getByTestId("merchant-name")).toHaveCount(0);
+    await expect(page.locator(".np-checkout__merchant-name")).toHaveCount(0);
     // Retry creates a new attempt and verifies again.
     s.sentinel = "ok";
     await page.getByTestId("retry").click();
     await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
     await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
     await page.getByTestId("continue").click();
-    await expect(page.getByTestId("merchant-name")).toHaveText("Acme GmbH");
+    await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
     await expect(page.getByTestId("replaced")).toBeVisible();
     expect(mock.callsTo("createPaymentAttempt")).toHaveLength(2);
   });
@@ -145,7 +152,8 @@ test("live status: top-up, refund and retry", async ({ page, mock }) => {
   mock.setAttempt(s, { status: "incomplete_deposit" });
   await expect(page.getByTestId("top-up")).toBeVisible();
   mock.setAttempt(s, { status: "refunded", refunded_amount: "1000000", attestation_ticket: null });
-  await expect(page.getByTestId("refunded")).toContainText("Refunded: 1.00 USDC");
+  await expect(page.getByTestId("refunded")).toContainText("Your payment was returned");
+  await expect(page.getByTestId("refunded-amount")).toHaveText("1.00 USDC");
   await page.getByTestId("retry").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();
 });
@@ -175,7 +183,7 @@ test("reload resumes the live attempt after verifying it again", async ({ page, 
   const s = mock.create();
   await manualToInstructions(page, mock, s);
   await page.reload();
-  await expect(page.getByTestId("merchant-name")).toHaveText("Acme GmbH");
+  await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   expect(mock.callsTo("createDepositInstructionsAttestation")).toHaveLength(2);
   expect(mock.callsTo("createPaymentAttempt")).toHaveLength(1);
 });
@@ -188,9 +196,8 @@ test("attempt errors: route too slow stays on the picker, geo block blocks", asy
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("error")).toContainText("can't complete in the time left");
-  await expect(page.getByTestId("asset-picker")).toBeVisible();
+  await expect(page.getByTestId("refund-form")).toBeVisible();
   s.attemptError = "geo_blocked";
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
   await expect(page.getByTestId("continue")).toBeEnabled();
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("blocked-geo_blocked")).toBeVisible();
@@ -212,9 +219,11 @@ test("blocked: malformed link, wrong secret, expired session, completed session"
   await expect(page.getByTestId("continue-merchant")).toHaveCount(0);
 });
 
-test("payment links and invoices are not available in Stage 1", async ({ page, mock }) => {
+test("invoices are not available yet; malformed payment link ids are refused", async ({ page, mock }) => {
+  await page.goto(`${mock.origin}/i/in_123`);
+  await expect(page.getByTestId("blocked-not_available")).toBeVisible();
   await page.goto(`${mock.origin}/l/plink_123`);
-  await expect(page.getByTestId("not-available")).toBeVisible();
+  await expect(page.getByTestId("blocked-invalid_link")).toBeVisible();
 });
 
 test("the client secret never leaves the fragment except in the header", async ({ page, mock }) => {

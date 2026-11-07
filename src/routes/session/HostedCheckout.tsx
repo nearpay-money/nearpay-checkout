@@ -1,10 +1,11 @@
 /** Hosted checkout `/c/:id#<client_secret>` (§1, §5.9: success → redirect to `success_url?session_id=`). */
+import { CheckoutFrame } from "@nearpay-internal/ui";
 import { useEffect, useState } from "react";
 import { CheckoutView } from "../../app/CheckoutView";
 import { safeHttpUrl, successRedirect } from "../../app/route";
+import { BlockedScreen } from "../../app/StatusScreens";
 import { useCheckout } from "../../app/useCheckout";
-import { t } from "../../lib/i18n/t";
-import { Button } from "../../ui/primitives";
+import { webLinks } from "../../config";
 
 export const REDIRECT_DELAY_MS = 2500;
 
@@ -22,48 +23,24 @@ export function HostedCheckout({ sessionId, secret }: { sessionId: string; secre
     return () => clearTimeout(id);
   }, [target]);
 
-  const cancel = safeHttpUrl(session?.cancel_url ?? null);
-  const footer = (
-    <>
-      {target ? (
-        <>
-          {redirecting ? <span className="np-help">{t("succeeded.redirect")}</span> : null}
-          <a className="np-btn np-btn-primary" href={target} data-testid="continue-merchant">
-            {t("succeeded.continue")}
-          </a>
-        </>
-      ) : null}
-      {cancel && !succeeded && c.state.phase !== "processing" ? (
-        <a className="np-link" href={cancel} data-testid="cancel">
-          {t("app.cancel")}
-        </a>
-      ) : null}
-    </>
-  );
-  return <CheckoutView c={c} footer={footer} />;
-}
-
-export function InvalidLink() {
   return (
-    <main className="np-card">
-      <section className="np-section" data-testid="blocked">
-        <h2 className="np-h2">{t("blocked.title")}</h2>
-        <p data-testid="blocked-invalid_link">{t("blocked.invalid_link")}</p>
-      </section>
-    </main>
+    <CheckoutView
+      c={c}
+      mode="hosted"
+      returnTo={target}
+      redirecting={redirecting}
+      cancelUrl={safeHttpUrl(session?.cancel_url ?? null)}
+    />
   );
 }
 
-export function NotAvailable({ what }: { what: string }) {
+/** A link without a valid client secret, an unknown path, or a page not built yet (invoices, Stage 3). */
+export function InvalidLink({ reason = "invalid_link" }: { reason?: "invalid_link" | "not_available" }) {
   return (
-    <main className="np-card">
-      <section className="np-section" data-testid="not-available">
-        <h2 className="np-h2">{t("blocked.title")}</h2>
-        <p>{what}</p>
-        <Button kind="link" onClick={() => window.history.back()}>
-          {t("app.back")}
-        </Button>
-      </section>
-    </main>
+    <CheckoutFrame links={webLinks} className="ck-frame">
+      <div className="ck-flow">
+        <BlockedScreen reason={reason} />
+      </div>
+    </CheckoutFrame>
   );
 }
