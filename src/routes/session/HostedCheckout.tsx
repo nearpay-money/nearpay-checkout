@@ -34,12 +34,12 @@ export function HostedCheckout({ sessionId, secret }: { sessionId: string; secre
   );
 }
 
-/** A link without a valid client secret, an unknown path, or a page not built yet (invoices, Stage 3). */
-export function InvalidLink({ reason = "invalid_link" }: { reason?: "invalid_link" | "not_available" }) {
+/** A link without a valid client secret or an unknown path. */
+export function InvalidLink() {
   return (
     <CheckoutFrame links={webLinks} className="ck-frame">
       <div className="ck-flow">
-        <BlockedScreen reason={reason} />
+        <BlockedScreen reason="invalid_link" />
       </div>
     </CheckoutFrame>
   );

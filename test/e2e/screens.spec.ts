@@ -185,5 +185,83 @@ for (const [w, h] of WIDTHS) {
         await merchant.stop();
       }
     });
+
+    test("hosted invoices", async ({ page, mock }) => {
+      const open = mock.createInvoice({}, { sessionOpts: { autoSucceed: true } });
+      await page.goto(mock.invoiceUrl(open));
+      await expect(page.getByTestId("invoice-page")).toBeVisible();
+      await shot(page, "30-invoice-open");
+      await page.getByTestId("invoice-pay").click();
+      await expect(page.getByTestId("choose-path")).toBeVisible();
+      await shot(page, "31-invoice-pay-start");
+      await page.getByTestId("path-manual").click();
+      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await page.getByTestId("refund-address").fill(REFUND);
+      await page.getByTestId("continue").click();
+      await expect(page.getByTestId("manual-instructions")).toBeVisible();
+      await page.getByTestId("confirm-network").check();
+      await shot(page, "32-invoice-pay-instructions");
+      await page.getByTestId("simulate").click();
+      await expect(page.getByTestId("succeeded")).toBeVisible();
+      await shot(page, "33-invoice-payment-complete");
+      await page.getByTestId("view-invoice").click();
+      await expect(page.getByTestId("invoice-paid")).toBeVisible();
+      await shot(page, "34-invoice-paid");
+      const overdue = mock.createInvoice({
+        livemode: true,
+        due_date: "2026-11-01T12:00:00.000Z",
+        lines: [
+          {
+            description: "Design retainer — November",
+            quantity: 1,
+            unit_amount: 150000,
+            amount: 150000,
+            period: { start: "2026-11-01T00:00:00.000Z", end: "2026-12-01T00:00:00.000Z" },
+            tax_amounts: [],
+          },
+          {
+            description: "Extra review rounds",
+            quantity: 3,
+            unit_amount: 12000,
+            amount: 36000,
+            period: null,
+            tax_amounts: [],
+          },
+        ],
+        subtotal: 186000,
+        tax: 35340,
+        total: 221340,
+        total_excluding_tax: 186000,
+        total_tax_amounts: [
+          { display_name: "VAT", jurisdiction: "DE", percentage: "19", inclusive: false, amount: 35340 },
+        ],
+        amount_due: 221340,
+        amount_paid: 0,
+        amount_remaining: 221340,
+      });
+      await page.goto(mock.invoiceUrl(overdue));
+      await expect(page.getByTestId("invoice-overdue")).toBeVisible();
+      await shot(page, "35-invoice-overdue");
+      const unc = mock.createInvoice({ status: "uncollectible", due_date: "2026-10-01T12:00:00.000Z" });
+      await page.goto(mock.invoiceUrl(unc));
+      await expect(page.getByTestId("invoice-uncollectible")).toBeVisible();
+      await shot(page, "36-invoice-uncollectible");
+      const voided = mock.createInvoice({ status: "void", payable: false, voided_at: "2026-11-03T12:00:00.000Z" });
+      await page.goto(mock.invoiceUrl(voided));
+      await expect(page.getByTestId("invoice-void")).toBeVisible();
+      await shot(page, "37-invoice-void");
+      await page.goto(`${mock.origin}/i/${open.invoice.id}#${open.invoice.id}_secret_${"Q".repeat(32)}`);
+      await expect(page.getByTestId("invoice-not-found")).toBeVisible();
+      await shot(page, "38-invoice-not-found");
+      const exp = mock.createInvoice();
+      await page.goto(mock.invoiceUrl(exp));
+      await page.getByTestId("invoice-pay").click();
+      await expect(page.getByTestId("choose-path")).toBeVisible();
+      const es = exp.sessions[0] as MockSession;
+      es.session.status = "expired";
+      mock.push(es, "session", es.session);
+      await expect(page.getByTestId("invoice-session-expired")).toBeVisible();
+      await shot(page, "39-invoice-session-expired");
+    });
   });
 }

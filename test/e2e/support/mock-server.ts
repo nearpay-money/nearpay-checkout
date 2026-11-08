@@ -13,14 +13,19 @@ import {
   createDepositInstructionsAttestation,
   createPaymentAttempt,
   createPaymentLinkSession,
+  createPublicInvoiceSession,
   getPublicCheckoutSession,
+  getPublicInvoice,
+  getPublicInvoicePdf,
   getPublicPaymentLink,
   IntentStreamEvent,
   listPaymentOptions,
   PayerAttempt,
   PublicCheckoutSession,
+  PublicInvoice,
   PublicPaymentLink,
   pathMatcher,
+  safeParseTolerant,
   signalDepositSent,
   simulateDeposit,
   streamCheckoutSession,
@@ -30,6 +35,7 @@ import {
 import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
 import { SEED, sentinelVectors } from "../../support/fixtures";
+import { type InvoiceFixture, invoice as invoiceFixture } from "../../support/invoices";
 import {
   type Attempt,
   attempt as attemptFixture,
@@ -86,6 +92,21 @@ export interface MockLink {
   sessions: MockSession[];
 }
 
+export interface MockInvoice {
+  invoice: InvoiceFixture;
+  secret: string;
+  /** Error code returned by the next createPublicInvoiceSession call. */
+  sessionError: string | null;
+  /** Sessions the hosted invoice opened (the last one is current). */
+  sessions: MockSession[];
+  /** Options for those sessions. */
+  sessionOpts: Partial<Omit<MockSession, "session">>;
+  /** Billing records the payment this long after the intent succeeded (event lag). */
+  paidLagMs: number;
+  /** The PDF route fails with this status. */
+  pdfStatus: number | null;
+}
+
 export interface Call {
   route: string;
   body: unknown;
@@ -104,6 +125,9 @@ const ROUTES: AnyRoute[] = [
   createDepositInstructionsAttestation,
   getPublicPaymentLink,
   createPaymentLinkSession,
+  getPublicInvoice,
+  createPublicInvoiceSession,
+  getPublicInvoicePdf,
 ];
 
 const ERRORS: Record<string, [number, string]> = {
@@ -118,6 +142,10 @@ const ERRORS: Record<string, [number, string]> = {
   link_inactive: [409, "state_conflict"],
   resource_missing: [404, "invalid_request_error"],
   account_not_live: [403, "permission_error"],
+  invoice_secret_invalid: [401, "authentication_error"],
+  invoice_not_payable: [409, "state_conflict"],
+  destination_not_active: [409, "state_conflict"],
+  rate_limited: [429, "rate_limit_error"],
 };
 
 const MIME: Record<string, string> = {
@@ -188,6 +216,7 @@ function check<T>(schema: { safeParse(v: unknown): { success: boolean; error?: u
 export class MockNearPay {
   readonly sessions = new Map<string, MockSession>();
   readonly links = new Map<string, MockLink>();
+  readonly invoices = new Map<string, MockInvoice>();
   readonly calls: Call[] = [];
   private server: Server | null = null;
   port = 0;
@@ -219,6 +248,7 @@ export class MockNearPay {
     for (const s of this.sessions.values()) for (const r of s.streams) r.end();
     this.sessions.clear();
     this.links.clear();
+    this.invoices.clear();
     this.calls.length = 0;
   }
 
@@ -270,6 +300,48 @@ export class MockNearPay {
     return l;
   }
 
+  /** A finalized invoice (`PublicInvoice`) with its secret; pays through mock sessions. */
+  createInvoice(over: Partial<InvoiceFixture> = {}, opts: Partial<Omit<MockInvoice, "invoice">> = {}): MockInvoice {
+    const id = nextId("in");
+    const secret = `${id}_secret_${"Kp7".repeat(10)}Qz`;
+    const invoice = invoiceFixture({ ...over, id: id as `in_${string}` });
+    const m: MockInvoice = {
+      invoice,
+      secret,
+      sessionError: null,
+      sessions: [],
+      sessionOpts: {},
+      paidLagMs: 0,
+      pdfStatus: null,
+      ...opts,
+    };
+    this.invoices.set(id, m);
+    return m;
+  }
+
+  invoiceUrl(m: MockInvoice): string {
+    return `${this.origin}/i/${m.invoice.id}#${m.secret}`;
+  }
+
+  /** Billing marks the invoice paid (after `invoice.paidLagMs`). */
+  private invoicePaid(s: MockSession): void {
+    const m = [...this.invoices.values()].find((x) => x.sessions.includes(s));
+    if (!m) return;
+    const apply = () => {
+      const i = m.invoice;
+      Object.assign(i, {
+        status: "paid",
+        payable: false,
+        amount_paid: i.amount_remaining,
+        amount_remaining: typeof i.amount_remaining === "number" ? 0 : "0",
+        paid_at: new Date().toISOString(),
+        checkout_session: null,
+      });
+    };
+    if (m.paidLagMs > 0) setTimeout(apply, m.paidLagMs);
+    else apply();
+  }
+
   url(s: MockSession, mode: "c" | "embed" = "c"): string {
     return `${this.origin}/${mode}/${s.session.id}#${s.secret}`;
   }
@@ -309,6 +381,7 @@ export class MockNearPay {
   succeed(s: MockSession): void {
     this.setAttempt(s, { status: "succeeded", attestation_ticket: null });
     this.setIntent(s, "succeeded");
+    this.invoicePaid(s);
   }
 
   /** Body of the n-th call to a route (throws when there is none). */
@@ -386,6 +459,10 @@ export class MockNearPay {
       );
     }
 
+    if (route === getPublicInvoice || route === createPublicInvoiceSession || route === getPublicInvoicePdf) {
+      return this.invoiceRoute(route, req, res, path.split("/")[3] as string);
+    }
+
     const id = path.split("/")[4] as string;
     const s = this.sessions.get(id);
     if (!s || req.headers["x-nearpay-client-secret"] !== s.secret) return apiError(res, "client_secret_invalid");
@@ -421,6 +498,67 @@ export class MockNearPay {
       }
     }
     return apiError(res, "resource_missing");
+  }
+
+  private invoiceRoute(route: AnyRoute, req: IncomingMessage, res: ServerResponse, id: string) {
+    const m = this.invoices.get(id);
+    // Unknown id → 404, wrong secret → 401: the page must render both identically (no oracle).
+    if (!m) return apiError(res, "resource_missing");
+    if (req.headers["x-nearpay-invoice-secret"] !== m.secret) return apiError(res, "invoice_secret_invalid");
+    const inv = m.invoice;
+    if (route === getPublicInvoice) {
+      const r = safeParseTolerant(PublicInvoice, inv);
+      if (!r.success) throw new Error(`mock produced an invalid invoice: ${JSON.stringify(r.error)}`);
+      return send(res, 200, inv);
+    }
+    if (route === getPublicInvoicePdf) {
+      if (m.pdfStatus)
+        return send(res, m.pdfStatus, { error: { type: "api_error", code: "api_error", message: "pdf" } });
+      res.writeHead(200, { "content-type": "application/pdf", "content-disposition": "inline" });
+      res.end(Buffer.from(`%PDF-1.4\n% ${inv.number} ${inv.status}\n%%EOF\n`));
+      return;
+    }
+    if (m.sessionError) {
+      const code = m.sessionError;
+      m.sessionError = null;
+      return apiError(res, code);
+    }
+    if (!inv.payable || (inv.status !== "open" && inv.status !== "uncollectible")) {
+      return apiError(res, "invoice_not_payable");
+    }
+    const cur = m.sessions.at(-1);
+    const reused = cur !== undefined && cur.session.status === "open";
+    const s =
+      reused && cur
+        ? cur
+        : this.create(
+            {
+              livemode: inv.livemode,
+              amount: inv.amount_remaining as number,
+              currency: inv.currency,
+              display: { merchant_name_unverified: "Acme (unverified)", description: `Invoice ${inv.number}` },
+              success_url: `${this.origin}/i/${inv.id}`,
+              cancel_url: null,
+            },
+            m.sessionOpts,
+          );
+    if (!reused) m.sessions.push(s);
+    inv.checkout_session = s.session.id;
+    return send(
+      res,
+      201,
+      check(
+        createPublicInvoiceSession.response,
+        {
+          object: "invoice_payment_session",
+          checkout_session: s.session.id,
+          client_secret: s.secret,
+          expires_at: s.session.expires_at,
+          reused,
+        },
+        "invoice payment session",
+      ),
+    );
   }
 
   private createAttempt(s: MockSession, res: ServerResponse, body: Record<string, string>) {

@@ -2,7 +2,7 @@ import "@nearpay-internal/ui/fonts.css";
 import "@nearpay-internal/ui/tokens.css";
 import "@nearpay-internal/ui/styles.css";
 import "./styles.css";
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { applyCheckoutAppearance } from "./app/appearance";
 import { parseRoute } from "./app/route";
@@ -12,6 +12,9 @@ import { EmbeddedCheckout } from "./routes/embed/EmbeddedCheckout";
 import { DEFAULT_APPEARANCE } from "./routes/embed/protocol";
 import { PaymentLinkCheckout } from "./routes/payment-link/PaymentLinkCheckout";
 import { HostedCheckout, InvalidLink } from "./routes/session/HostedCheckout";
+
+// Hosted invoices load on demand: the checkout's initial bundle stays within budget (§7).
+const InvoicePage = lazy(() => import("./routes/invoice/InvoicePage"));
 
 const route = parseRoute(window.location.pathname, window.location.hash);
 // The bridge listens before the first render so an early np:init is not lost.
@@ -34,7 +37,11 @@ function App() {
     case "payment_link":
       return <PaymentLinkCheckout id={route.id} />;
     case "invoice":
-      return <InvalidLink reason="not_available" />;
+      return (
+        <Suspense fallback={null}>
+          <InvoicePage link={route.invoice} />
+        </Suspense>
+      );
     default:
       return <InvalidLink />;
   }
