@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  "@nearpay/spec": 0.3.0
+  "@nearpay/spec": 0.3.1
 
 importers:
   .:
@@ -14,11 +14,11 @@ importers:
         specifier: 0.11.4
         version: 0.11.4
       "@nearpay-internal/ui":
-        specifier: 0.3.0
-        version: 0.3.0(react@19.1.10)
+        specifier: 0.3.1
+        version: 0.3.1(react@19.1.10)
       "@nearpay/spec":
-        specifier: 0.3.0
-        version: 0.3.0(zod@4.6.7)
+        specifier: 0.3.1
+        version: 0.3.1(zod@4.6.7)
       "@noble/curves":
         specifier: 2.4.0
         version: 2.4.0
@@ -375,16 +375,16 @@ packages:
     resolution:
       { integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw== }
 
-  "@nearpay-internal/ui@0.3.0":
+  "@nearpay-internal/ui@0.3.1":
     resolution:
-      { integrity: sha512-MgE/2FeAgQa4gJoqhj36aixxHaXgmRD4K/Uv47vGVt/0+KrnVK0YY97KhCjor23JhTmsmCC1v1h75vh35jmzZA== }
+      { integrity: sha512-AKBFIDKR29SwNXdI5sPLKU/md6PV/2AcABqPRQbZJlXrQTZT8w7TSX+ZA5ubREI3p1jLQb2z5AfmMAAeR/IXPw== }
     engines: { node: ">=22.11.0" }
     peerDependencies:
       react: ^19.0.0
 
-  "@nearpay/spec@0.3.0":
+  "@nearpay/spec@0.3.1":
     resolution:
-      { integrity: sha512-jBGwGvnN0E/CooJ3ixz3BFcG8xq/OR6Q4Hwj0+yo7hiYw0KcHE8zrbkwt4zCKE34QRMx11+3kHRriIFwgoAtJg== }
+      { integrity: sha512-1w/1jPXcekL6txxReb+6t+kGY5jBQiQg7qfr7mcMxtsErFxvivCqQNw01b9ghHq2tKJ7U3ZvvRVFN8BXcdvbxw== }
     engines: { node: ">=22.11.0" }
     peerDependencies:
       zod: ^4.6.7
@@ -1293,12 +1293,12 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.6.0
 
-  "@nearpay-internal/ui@0.3.0(react@19.1.10)":
+  "@nearpay-internal/ui@0.3.1(react@19.1.10)":
     dependencies:
       "@fontsource-variable/dm-sans": 5.3.0
       react: 19.1.10
 
-  "@nearpay/spec@0.3.0(zod@4.6.7)":
+  "@nearpay/spec@0.3.1(zod@4.6.7)":
     dependencies:
       zod: 4.6.7
 
