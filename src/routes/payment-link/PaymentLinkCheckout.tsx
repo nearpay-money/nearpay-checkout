@@ -15,7 +15,7 @@ import { LoadingScreen } from "../../app/StatusScreens";
 import { webLinks } from "../../config";
 import { call, isApiError } from "../../lib/api/client";
 import { errorText, t } from "../../lib/i18n/t";
-import { priceMoney } from "../../lib/money/display";
+import { priceMoney, pricingAssetMeta } from "../../lib/money/display";
 import { ScreenTitle, StateScreen } from "../../ui/blocks";
 import { useMediaQuery } from "../../ui/useMediaQuery";
 import { HostedCheckout } from "../session/HostedCheckout";
@@ -55,7 +55,8 @@ export function PaymentLinkCheckout({ id }: { id: string }) {
   if (st.kind === "session") return <HostedCheckout sessionId={st.sessionId} secret={st.secret} />;
 
   const link = st.kind === "ready" || st.kind === "inactive" ? st.link : null;
-  const price = link ? priceMoney(link, null) : null;
+  // Asset-priced links: `pricing_asset` (spec 0.2.1) gives decimals/symbol; older servers → base units.
+  const price = link ? priceMoney(link, pricingAssetMeta(link.asset_id, link.pricing_asset)) : null;
   const emailOk = EMAIL_RE.test(email.trim()) && email.trim().length <= 254;
 
   const open = async () => {

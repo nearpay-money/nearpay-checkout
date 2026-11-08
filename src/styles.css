@@ -138,22 +138,8 @@ html[data-theme="dark"] {
   list-style: none;
 }
 
-.ck-option-button {
-  width: 100%;
-  font: inherit;
-  text-align: left;
-}
-
-.ck-option-button:focus-visible {
-  outline: 2px solid var(--np-color-focus);
-  outline-offset: 2px;
-}
-
-.ck-option-button:disabled {
-  cursor: not-allowed;
-}
-
-.ck-option-button .np-option__indicator {
+/* Kit OptionButton (np-option--button): the chevron keeps the secondary text colour. */
+.np-option--button .np-option__indicator {
   color: var(--np-color-text-secondary);
 }
 
@@ -289,4 +275,74 @@ html[data-theme="dark"] {
   display: flex;
   flex-direction: column;
   gap: var(--np-space-4);
+}
+
+/* Hosted invoice (/i/:id): the invoice document in the summary column, actions in the card. */
+.ck-invoice-doc {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-space-5);
+}
+
+.ck-invoice-memo {
+  margin: 0;
+  color: var(--np-color-text);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ck-invoice-footer {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.ck-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-space-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ck-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--np-space-4);
+  row-gap: var(--np-space-1);
+}
+
+.ck-line__desc {
+  font-size: var(--np-text-h4, 20px);
+  font-weight: var(--np-weight-medium);
+  line-height: 28px;
+  overflow-wrap: anywhere;
+}
+
+.ck-line__amount {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: baseline;
+  font-weight: var(--np-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.ck-line__meta {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: var(--np-text-small);
+  line-height: 24px;
+  color: var(--np-color-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.ck-invoice .np-checkout__summary .np-checkout__title {
+  overflow-wrap: anywhere;
+}
+
+/* Several lines: a compact list (the Figma's single-line frame keeps the larger description). */
+.ck-lines:has(> .ck-line + .ck-line) .ck-line__desc {
+  font-size: var(--np-text-body);
+  line-height: 24px;
 }

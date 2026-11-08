@@ -4,9 +4,10 @@
  * against the route's request schemas before they leave; responses are parsed with the response
  * schemas, tolerating unknown fields and unknown open-enum values (api-conventions §5).
  *
- * The client secret travels only in the `X-NearPay-Client-Secret` header and is never logged.
+ * The client secret travels only in the `X-NearPay-Client-Secret` header and the invoice secret only in
+ * `X-NearPay-Invoice-Secret` (hosted invoices, Stage 3); neither is ever logged or put in a URL.
  */
-import { type AnyRoute, buildPath, type RouteResponse, safeParseTolerant } from "@nearpay/spec";
+import { type AnyRoute, buildPath, HEADERS, type RouteResponse, safeParseTolerant } from "@nearpay/spec";
 import type { z } from "zod";
 import { config } from "../../config";
 
@@ -56,6 +57,8 @@ export interface CallOptions {
   readonly query?: Record<string, string | undefined>;
   readonly body?: unknown;
   readonly secret?: string;
+  /** Invoice secret from the `/i/:id` fragment, for routes that declare `X-NearPay-Invoice-Secret`. */
+  readonly invoiceSecret?: string;
   readonly signal?: AbortSignal;
   /** Return the raw JSON body without schema parsing (sentinel: verified byte-for-byte later). */
   readonly raw?: boolean;
@@ -104,20 +107,31 @@ export function networkError(): ApiError {
   });
 }
 
-/** Calls a spec route. */
-export async function call<R extends AnyRoute>(
-  route: R,
-  opts: CallOptions = {},
-  doFetch: Fetch = (...a) => fetch(...a),
-): Promise<RouteResponse<R>> {
+const INVOICE_SECRET_HEADER = HEADERS.invoiceSecret.toLowerCase();
+
+/** The route declares the invoice-secret header (hosted invoice payer routes). */
+function needsInvoiceSecret(route: AnyRoute): boolean {
+  const shape = (route.headers as { shape?: Record<string, unknown> } | undefined)?.shape;
+  return shape !== undefined && INVOICE_SECRET_HEADER in shape;
+}
+
+async function send(route: AnyRoute, opts: CallOptions, accept: string, doFetch: Fetch): Promise<Response> {
   if (route.body) {
     const ok = route.body.safeParse(opts.body ?? {});
     if (!ok.success) throw new RangeError(`request for ${route.id} does not match the contract`);
   }
-  const headers: Record<string, string> = { Accept: "application/json" };
+  const headers: Record<string, string> = { Accept: accept };
   if (route.auth.includes("client_secret")) {
     if (!opts.secret) throw new RangeError(`${route.id} needs the client secret`);
     headers["X-NearPay-Client-Secret"] = opts.secret;
+  }
+  if (needsInvoiceSecret(route)) {
+    // Checked against the route's own header schema before it leaves: a malformed secret is never sent.
+    const h = { [INVOICE_SECRET_HEADER]: opts.invoiceSecret };
+    if (!opts.invoiceSecret || !route.headers?.safeParse(h).success) {
+      throw new RangeError(`${route.id} needs the invoice secret`);
+    }
+    headers[HEADERS.invoiceSecret] = opts.invoiceSecret as string;
   }
   if (route.method !== "GET") headers["Content-Type"] = "application/json";
   let res: Response;
@@ -136,6 +150,36 @@ export async function call<R extends AnyRoute>(
     throw networkError();
   }
   if (res.status !== route.status) throw await errorFrom(res);
+  return res;
+}
+
+/**
+ * Calls a route with a binary success body (`binaryResponse`, e.g. the invoice PDF). The body must have
+ * the declared content type; anything else is `invalid_response`.
+ */
+export async function callBinary(
+  route: AnyRoute,
+  opts: CallOptions = {},
+  doFetch: Fetch = (...a) => fetch(...a),
+): Promise<Blob> {
+  const type = route.binaryResponse?.contentType;
+  if (!type) throw new RangeError(`${route.id} has no binary response`);
+  const res = await send(route, opts, `${type}, application/json`, doFetch);
+  const got = (res.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
+  if (got !== type) throw parseTolerantFailure();
+  const blob = await res.blob().catch(() => {
+    throw networkError();
+  });
+  return blob.type === type ? blob : new Blob([blob], { type });
+}
+
+/** Calls a spec route. */
+export async function call<R extends AnyRoute>(
+  route: R,
+  opts: CallOptions = {},
+  doFetch: Fetch = (...a) => fetch(...a),
+): Promise<RouteResponse<R>> {
+  const res = await send(route, opts, "application/json", doFetch);
   if (route.response === null) return undefined as RouteResponse<R>;
   let json: unknown;
   try {

@@ -13,8 +13,11 @@ export interface AssetMeta {
   readonly asset_id: string;
   readonly symbol: string;
   readonly decimals: number;
-  /** `attested` = from the sentinel signature; `options` = from payments' payment options. */
-  readonly source: "attested" | "options";
+  /**
+   * `attested` = from the sentinel signature; `pricing` = the session's / link's / invoice's
+   * `pricing_asset` (spec 0.2.1, rails registry, not attested); `options` = payments' payment options.
+   */
+  readonly source: "attested" | "pricing" | "options";
 }
 
 interface OptionLike {
@@ -36,6 +39,21 @@ export function assetMeta(
   return o ? { asset_id: assetId, symbol: o.symbol, decimals: o.decimals, source: "options" } : null;
 }
 
+interface PricingAssetLike {
+  readonly asset_id: string;
+  readonly symbol: string;
+  readonly decimals: number;
+}
+
+/**
+ * Display data of a pricing asset (`pricing_asset` on `PublicCheckoutSession`, `PublicPaymentLink` and
+ * `PublicInvoice`, spec 0.2.1): used only when it describes `assetId`; older servers omit it.
+ */
+export function pricingAssetMeta(assetId: string | null, p: PricingAssetLike | null | undefined): AssetMeta | null {
+  if (!assetId || !p || p.asset_id !== assetId) return null;
+  return { asset_id: assetId, symbol: p.symbol, decimals: p.decimals, source: "pricing" };
+}
+
 /** Asset the payer sends, per the attestation. */
 export function paidAssetId(att: Attestation): string | null {
   return att.deposit?.origin_asset_id ?? att.requirement?.token ?? null;
@@ -48,9 +66,54 @@ export function totalToSend(att: Attestation): string | null {
   return (BigInt(att.requirement.amount) + BigInt(att.requirement.fee_amount)).toString();
 }
 
-/** Payer fee the attestation states separately (Intents transfers only; route quotes include it). */
-export function statedFee(att: Attestation): string | null {
-  return att.kind === "intents_transfer" ? (att.requirement?.fee_amount ?? null) : null;
+const BASE_UNITS_RE = /^(0|[1-9][0-9]{0,77})$/;
+
+/**
+ * Payer fee shown as "Payment fees": Intents transfers state it in the attested requirement; route
+ * quotes carry `DepositInstructions.fee_amount` (spec 0.2.1) — display only, NOT attested, so it is
+ * read from the verified attempt's own instructions and shown only when it is a well-formed part of
+ * the attested `amount_in` (else "Included in total"). `"0"` = the merchant bears the fee.
+ */
+export function payerFee(
+  att: Attestation,
+  attempt: {
+    readonly id: string;
+    readonly deposit: { readonly amount_in: string; readonly fee_amount?: string | null | undefined } | null;
+  } | null,
+): string | null {
+  if (att.kind === "intents_transfer") return att.requirement?.fee_amount ?? null;
+  const fee = attempt && attempt.id === att.attempt_id ? attempt.deposit?.fee_amount : null;
+  const total = att.deposit?.amount_in;
+  if (typeof fee !== "string" || !total || !BASE_UNITS_RE.test(fee)) return null;
+  if (attempt?.deposit?.amount_in !== total || BigInt(fee) > BigInt(total)) return null;
+  return fee;
+}
+
+/**
+ * "We received less than expected" (`incomplete_deposit`): what arrived (`PayerAttempt.amount_received`,
+ * spec 0.2.1, display only) and what is still missing of the attested amount. Null when unknown or
+ * malformed; `remaining` null unless the received amount is below the attested one.
+ */
+export function receivedSoFar(
+  attested: string,
+  received: string | null | undefined,
+): { readonly received: string; readonly remaining: string | null } | null {
+  if (typeof received !== "string" || !BASE_UNITS_RE.test(received) || !BASE_UNITS_RE.test(attested)) return null;
+  const diff = BigInt(attested) - BigInt(received);
+  return { received, remaining: diff > 0n ? diff.toString() : null };
+}
+
+/**
+ * Token contract for the wallet transfer: the attested `Attestation.asset.token` (spec 0.2.1, signed)
+ * when sentinel sends it — `null` there means "no registry contract" (the attested asset id's derived
+ * recipe still applies) — else the payment option's unattested `token` (CR-15-06).
+ */
+export function walletTokenHint<T>(
+  att: Pick<Attestation, "asset"> | null,
+  optionToken: T | null | undefined,
+): NonNullable<Attestation["asset"]>["token"] | T | null | undefined {
+  const attested = att?.asset?.token;
+  return attested !== undefined ? attested : optionToken;
 }
 
 /** Amount options for an asset amount; null without metadata (the caller shows raw base units). */

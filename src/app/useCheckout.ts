@@ -22,7 +22,7 @@ import type { WalletHandle } from "../features/wallet-connect/wallets";
 import { call, isApiError } from "../lib/api/client";
 import { NEAR_MAINNET, walletAsset } from "../lib/chains/chains";
 import { type VerifiedInstructions, verifyAttestation } from "../lib/integrity/verify";
-import { type AssetMeta, assetMeta, paidAssetId, totalToSend } from "../lib/money/display";
+import { type AssetMeta, assetMeta, paidAssetId, totalToSend, walletTokenHint } from "../lib/money/display";
 import { ensureChain, personalSign, sendTransaction, WalletRejected } from "../wallets/evm/provider";
 import { evmPaymentTx } from "../wallets/evm/tx";
 import {
@@ -334,10 +334,11 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       const att = v.attestation;
       if (att.kind === "route_quote" && att.deposit) {
         const d = att.deposit;
-        // The recipe comes from the attested asset id; the option's typed token (CR-15-06) is used only
-        // when it describes the same attested asset and chain (never for another asset).
+        // The recipe comes from the attested asset id; the signed `Attestation.asset.token` (spec 0.2.1)
+        // wins, else the option's typed token (CR-15-06) — only when that option describes the same
+        // attested asset and chain (never for another asset). Contradictions disable the wallet path.
         const meta = optionFor(state.option, originMeta, d.origin_asset_id, d.chain);
-        const asset = walletAsset(d.origin_asset_id, d.chain, meta?.token);
+        const asset = walletAsset(d.origin_asset_id, d.chain, walletTokenHint(att, meta?.token));
         if (!asset) throw new Error("This asset can't be paid from a wallet here.");
         let txHash: string;
         if (w.family === "evm" && (asset.kind === "evm_erc20" || asset.kind === "evm_native")) {

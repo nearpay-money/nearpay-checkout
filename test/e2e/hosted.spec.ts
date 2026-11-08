@@ -219,9 +219,7 @@ test("blocked: malformed link, wrong secret, expired session, completed session"
   await expect(page.getByTestId("continue-merchant")).toHaveCount(0);
 });
 
-test("invoices are not available yet; malformed payment link ids are refused", async ({ page, mock }) => {
-  await page.goto(`${mock.origin}/i/in_123`);
-  await expect(page.getByTestId("blocked-not_available")).toBeVisible();
+test("malformed payment link ids are refused", async ({ page, mock }) => {
   await page.goto(`${mock.origin}/l/plink_123`);
   await expect(page.getByTestId("blocked-invalid_link")).toBeVisible();
 });

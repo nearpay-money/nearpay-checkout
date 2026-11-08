@@ -56,8 +56,19 @@ export interface CheckoutViewProps {
   redirecting?: boolean;
   /** Hosted: validated cancel URL (topbar Back on the first screen). */
   cancelUrl?: string | null;
+  /** Hosted: in-app cancel (topbar Back on the first screen), e.g. "Back to invoice". */
+  onCancel?: (() => void) | null;
   /** Extra actions under the flow (embedded: Close). */
   extra?: ReactNode;
+  /**
+   * Desktop order summary head replacing the description + Subtotal rows (hosted invoices: the invoice
+   * lines and totals); the attested Payment fees / Total to send rows still follow it.
+   */
+  summaryHead?: ReactNode;
+  /** Actions of "Payment complete" when there is no success URL to return to (hosted invoices). */
+  completeActions?: ReactNode;
+  /** Replaces the generic blocked screen for some reasons (hosted invoices: expired session). */
+  renderBlocked?: (reason: NonNullable<Checkout["state"]["blockReason"]>) => ReactNode | null;
 }
 
 export function CheckoutView({
@@ -66,7 +77,11 @@ export function CheckoutView({
   returnTo = null,
   redirecting = false,
   cancelUrl = null,
+  onCancel = null,
   extra,
+  summaryHead,
+  completeActions,
+  renderBlocked,
 }: CheckoutViewProps) {
   const { state, actions, busy } = c;
   const wide = useMediaQuery("(min-width: 880px)");
@@ -153,7 +168,11 @@ export function CheckoutView({
       case "loading":
         return <LoadingScreen />;
       case "blocked":
-        return <BlockedScreen reason={state.blockReason ?? "load_failed"} />;
+        return (
+          renderBlocked?.(state.blockReason ?? "load_failed") ?? (
+            <BlockedScreen reason={state.blockReason ?? "load_failed"} />
+          )
+        );
       case "start":
         return (
           <StartScreen
@@ -231,6 +250,7 @@ export function CheckoutView({
             paid={c.trusted ? paid.current : null}
             returnTo={returnTo}
             redirecting={redirecting}
+            actions={completeActions}
           />
         );
       case "being_returned":
@@ -247,6 +267,7 @@ export function CheckoutView({
     if (busy) return undefined;
     if (screen === "send_from_another_wallet") return () => setManualForm(false);
     if (canGoBack(state)) return actions.back;
+    if (screen === "start" && onCancel) return onCancel;
     if (screen === "start" && cancelUrl) return () => window.location.assign(cancelUrl);
     return undefined;
   })();
@@ -262,7 +283,7 @@ export function CheckoutView({
       merchant={merchant ? { name: merchant.name, ...(vm.description ? { subtitle: vm.description } : {}) } : undefined}
       amount={amount}
       onBack={onBack}
-      summary={summaryFor(vm, wide, merchant !== null, state.session !== null)}
+      summary={summaryFor(vm, wide, merchant !== null, state.session !== null, summaryHead)}
       banner={
         vm.testMode ? (
           <Callout tone="info" title={t("app.testmode")} reference={t("app.testmodeRef")} data-testid="test-banner" />
@@ -288,7 +309,7 @@ export function CheckoutView({
  * Order summary: on desktop (two columns) the description and the Subtotal / Payment fees / Total rows;
  * on phones only the description, and only while no attested merchant subtitle carries it.
  */
-function summaryFor(vm: ViewModel, wide: boolean, hasMerchant: boolean, loaded: boolean): ReactNode {
+function summaryFor(vm: ViewModel, wide: boolean, hasMerchant: boolean, loaded: boolean, head?: ReactNode): ReactNode {
   if (!loaded) return undefined;
   if (!wide) {
     return !hasMerchant && vm.description ? (
@@ -298,6 +319,39 @@ function summaryFor(vm: ViewModel, wide: boolean, hasMerchant: boolean, loaded: 
     ) : undefined;
   }
   const total = vm.total ? assetMoney(vm.total, vm.asset) : null;
+  const attested = vm.total
+    ? [
+        {
+          label: t("summary.fees"),
+          value:
+            vm.fee === "0" ? (
+              t("summary.feesNone")
+            ) : vm.fee ? (
+              <Money {...(assetMoney(vm.fee, vm.asset) ?? { amount: vm.fee, decimals: 0 })} />
+            ) : (
+              t("summary.feesIncluded")
+            ),
+        },
+        {
+          label: t("summary.totalToSend"),
+          value: total ? <Money {...total} /> : `${vm.total} base units`,
+          total: true,
+        },
+      ]
+    : [];
+  if (head) {
+    return (
+      <>
+        {head}
+        {attested.length > 0 ? (
+          <>
+            <hr className="np-divider" />
+            <KeyValueList items={attested} />
+          </>
+        ) : null}
+      </>
+    );
+  }
   return (
     <>
       {vm.description ? (
@@ -309,23 +363,7 @@ function summaryFor(vm: ViewModel, wide: boolean, hasMerchant: boolean, loaded: 
       <KeyValueList
         items={[
           { label: t("summary.subtotal"), value: vm.price ? <Money {...vm.price} /> : vm.priceText },
-          ...(vm.total
-            ? [
-                {
-                  label: t("summary.fees"),
-                  value: vm.fee ? (
-                    <Money {...(assetMoney(vm.fee, vm.asset) ?? { amount: vm.fee, decimals: 0 })} />
-                  ) : (
-                    t("summary.feesIncluded")
-                  ),
-                },
-                {
-                  label: t("summary.totalToSend"),
-                  value: total ? <Money {...total} /> : `${vm.total} base units`,
-                  total: true,
-                },
-              ]
-            : []),
+          ...attested,
         ]}
       />
     </>

@@ -9,11 +9,10 @@ import { Button, Callout, Card, Checkbox, CopyField, KeyValueList, Money } from 
 import { useState } from "react";
 import { moneyText, referenceText, type ViewModel } from "../../app/model";
 import type { Checkout } from "../../app/useCheckout";
-import { chainName } from "../../lib/chains/chains";
+import { chainName, walletAsset } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
-import { assetMoney } from "../../lib/money/display";
+import { assetMoney, receivedSoFar, walletTokenHint } from "../../lib/money/display";
 import { CopyTextButton, ScreenTitle } from "../../ui/blocks";
-import { optionWalletAsset } from "../asset-picker/options";
 import { QrCode } from "./QrCode";
 import { qrPayload } from "./qr";
 import { withCountdown } from "./WalletPay";
@@ -29,12 +28,21 @@ export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewMode
   const ready = network && (d.memo === null || memo);
   const amount = assetMoney(d.amount_in, vm.asset);
   const amountLabel = moneyText(amount, `${d.amount_in} base units (${d.origin_asset_id})`);
-  // QR: EIP-681 needs the token contract; derived from the attested asset id (or the option's typed token
-  // for the same asset and chain, CR-15-06).
+  // QR: EIP-681 needs the token contract; derived from the attested asset id (or the signed
+  // `Attestation.asset.token`, spec 0.2.1, else the option's typed token for the same asset and chain).
   const opt = [c.state.option, c.originMeta].find(
     (o) => o?.origin_asset_id === d.origin_asset_id && o.chain === d.chain,
   );
-  const recipe = opt ? optionWalletAsset(opt) : null;
+  const recipe = walletAsset(d.origin_asset_id, d.chain, walletTokenHint(v.attestation, opt?.token));
+  // "Received" / "Still to send" (PayerAttempt.amount_received, spec 0.2.1; display only).
+  const got =
+    topUp && c.state.attempt?.id === v.attestation.attempt_id
+      ? receivedSoFar(d.amount_in, c.state.attempt.amount_received)
+      : null;
+  const money = (x: string) => {
+    const m = assetMoney(x, vm.asset);
+    return m ? <Money {...m} /> : `${x} base units`;
+  };
   const expires = <span data-testid="countdown">{withCountdown(t("deposit.expiresIn"), v.validUntil)}</span>;
 
   return (
@@ -49,7 +57,23 @@ export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewMode
             data-testid="top-up"
           />
           <ScreenTitle id="ck-send-title" title={t("less.title")} lede={t("less.body")} />
-          <KeyValueList items={[{ label: t("less.expected"), value: amount ? <Money {...amount} /> : amountLabel }]} />
+          <KeyValueList
+            items={[
+              { label: t("less.expected"), value: amount ? <Money {...amount} /> : amountLabel },
+              ...(got
+                ? [{ label: t("less.received"), value: <span data-testid="received">{money(got.received)}</span> }]
+                : []),
+              ...(got?.remaining
+                ? [
+                    {
+                      label: t("less.remaining"),
+                      value: <span data-testid="remaining">{money(got.remaining)}</span>,
+                      total: true,
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </>
       ) : (
         <ScreenTitle

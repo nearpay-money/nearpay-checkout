@@ -3,11 +3,17 @@ import { ClientSecretHeaders, idPattern } from "@nearpay/spec";
 
 export type Route =
   | { readonly kind: "hosted" | "embed"; readonly sessionId: string; readonly secret: string | null }
-  | { readonly kind: "payment_link" | "invoice"; readonly id: string }
+  | { readonly kind: "payment_link"; readonly id: string }
+  /**
+   * Hosted invoice `/i/<in_…>#<invoice secret>` (Stage 3). The (lazy-loaded) invoice page checks the
+   * secret against the spec's `InvoiceSecret` (`invoiceLink`); `invoice` is null for a malformed id.
+   */
+  | { readonly kind: "invoice"; readonly invoice: { readonly id: string; readonly secret: string } | null }
   | { readonly kind: "not_found" };
 
 const CS_RE = idPattern("cs");
 const PLINK_RE = idPattern("plink");
+const IN_RE = idPattern("in");
 const secretSchema = ClientSecretHeaders.shape["x-nearpay-client-secret"];
 
 export function parseRoute(pathname: string, hash: string): Route {
@@ -15,8 +21,8 @@ export function parseRoute(pathname: string, hash: string): Route {
   if (!m) return { kind: "not_found" };
   const [, kind, id] = m as unknown as [string, string, string];
   if (kind === "l") return PLINK_RE.test(id) ? { kind: "payment_link", id } : { kind: "not_found" };
-  if (kind === "i") return { kind: "invoice", id };
   const secret = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (kind === "i") return { kind: "invoice", invoice: IN_RE.test(id) ? { id, secret } : null };
   const valid = CS_RE.test(id) && secretSchema.safeParse(secret).success && secret.startsWith(`${id}_secret_`);
   return { kind: kind === "c" ? "hosted" : "embed", sessionId: id, secret: valid ? secret : null };
 }

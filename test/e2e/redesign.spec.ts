@@ -1,6 +1,7 @@
 /** Step 2.3: redesigned flows (review, change, wallet errors, re-quote), payment links, a11y basics. */
 import type { Page } from "@playwright/test";
 import { USDC_BASE } from "../support/sessions";
+import { a11yBasics } from "./support/a11y";
 import { expect, test } from "./support/fixtures";
 import { injectEvmWallet } from "./support/wallets";
 
@@ -9,27 +10,6 @@ async function toReview(page: Page) {
   await page.getByTestId("evm-wallet-test.mockwallet").click();
   await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
   await expect(page.getByTestId("wallet-send")).toBeVisible();
-}
-
-/** Every interactive control has an accessible name; no inline style attributes (CSP). */
-async function a11yBasics(page: Page) {
-  const issues = await page.evaluate(() => {
-    const out: string[] = [];
-    for (const el of document.querySelectorAll<HTMLElement>("button, a[href], input, select, [role=combobox]")) {
-      const label =
-        el.getAttribute("aria-label") ||
-        el.getAttribute("aria-labelledby") ||
-        (el.id && document.querySelector(`label[for="${el.id}"]`)?.textContent) ||
-        el.textContent?.trim() ||
-        el.getAttribute("title");
-      if (!label && el.getAttribute("type") !== "hidden" && el.getAttribute("aria-hidden") !== "true")
-        out.push(el.outerHTML.slice(0, 120));
-    }
-    if (document.querySelectorAll("h1").length !== 1) out.push(`h1 count ${document.querySelectorAll("h1").length}`);
-    if (document.querySelector("[style]")) out.push("inline style attribute");
-    return out;
-  });
-  expect(issues).toEqual([]);
 }
 
 test("wallet review: attested totals, fee note, quote countdown, change", async ({ page, mock }) => {

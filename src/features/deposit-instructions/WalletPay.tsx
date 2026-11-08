@@ -89,11 +89,14 @@ function Totals({ c, vm, compact = false }: { c: Checkout; vm: ViewModel; compac
         },
         {
           label: t("summary.fees"),
-          value: vm.fee ? (
-            amountNode(vm.fee, vm)
-          ) : (
-            <span className="np-text-secondary">{t("summary.feesIncluded")}</span>
-          ),
+          value:
+            vm.fee === "0" ? (
+              <span data-testid="payment-fees">{t("summary.feesNone")}</span>
+            ) : vm.fee ? (
+              <span data-testid="payment-fees">{amountNode(vm.fee, vm)}</span>
+            ) : (
+              <span className="np-text-secondary">{t("summary.feesIncluded")}</span>
+            ),
         },
         {
           label: t("summary.totalToSend"),

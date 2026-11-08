@@ -12,6 +12,7 @@ import {
   WalletIcon,
   WarningIcon,
 } from "@nearpay-internal/ui";
+import type { ReactNode } from "react";
 import { hasMessage, t } from "../lib/i18n/t";
 import { assetMoney } from "../lib/money/display";
 import { CopyTextButton, StateScreen } from "../ui/blocks";
@@ -21,11 +22,11 @@ import type { Checkout } from "./useCheckout";
 
 const ref = (vm: ViewModel) => (vm.reference ? referenceText(vm.reference, vm.merchant?.name ?? null) : undefined);
 
-export function LoadingScreen() {
+export function LoadingScreen({ label }: { label?: string } = {}) {
   return (
     <section className="ck-screen" aria-busy="true" data-testid="loading">
       <p className="np-sr-only" role="status">
-        {t("app.loading")}
+        {label ?? t("app.loading")}
       </p>
       <Skeleton shape="title" width="50" />
       <Skeleton shape="text" width="75" />
@@ -35,7 +36,7 @@ export function LoadingScreen() {
   );
 }
 
-export function BlockedScreen({ reason }: { reason: BlockReason | "not_available" }) {
+export function BlockedScreen({ reason }: { reason: BlockReason }) {
   return (
     <StateScreen
       testId="blocked"
@@ -240,6 +241,7 @@ export function CompleteScreen({
   paid,
   returnTo,
   redirecting,
+  actions,
 }: {
   vm: ViewModel;
   /** Attested amount + network of the payment made in this page load. */
@@ -247,6 +249,8 @@ export function CompleteScreen({
   /** Hosted: validated success URL. */
   returnTo: string | null;
   redirecting: boolean;
+  /** Actions when there is no success URL (hosted invoices: "View invoice"). */
+  actions?: ReactNode;
 }) {
   const merchant = vm.merchant?.name ?? null;
   return (
@@ -270,7 +274,9 @@ export function CompleteScreen({
               </p>
             ) : null}
           </>
-        ) : null
+        ) : (
+          (actions ?? null)
+        )
       }
     />
   );

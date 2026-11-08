@@ -170,7 +170,7 @@ describe("routes", () => {
       kind: "payment_link",
       id: "plink_01jbz9k3m4n5p6q7r8s9t0v1w2",
     });
-    expect(parseRoute("/i/in_1", "")).toEqual({ kind: "invoice", id: "in_1" });
+    expect(parseRoute("/i/in_1", "")).toEqual({ kind: "invoice", invoice: null }); // id validated
     expect(parseRoute("/", "")).toEqual({ kind: "not_found" });
   });
   it("redirects only to http(s) success URLs with session_id", () => {
