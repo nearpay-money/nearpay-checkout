@@ -227,6 +227,7 @@ export function CheckoutView({
       case "approve_in_wallet":
       case "not_approved":
       case "not_enough_funds":
+      case "tx_failed":
         return <WalletPay c={c} vm={vm} screen={screen} wide={wide && mode === "hosted"} />;
       case "send_manual":
       case "received_less":

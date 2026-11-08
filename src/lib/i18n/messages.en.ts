@@ -69,6 +69,8 @@ export const en = {
   "wallet.cancel": "Cancel",
   "wallet.useManual": "Send from another wallet instead",
   "wallet.address": "Wallet {address}",
+  "wallet.solanaHint": "Solana wallet",
+  "wallet.solanaNone": "No Solana wallet found in this browser.",
 
   "asset.title": "Pay with",
   "asset.search": "Search token or network",
@@ -151,6 +153,30 @@ export const en = {
   "review.switchChain": "Your wallet will switch to {chain}.",
   "review.quote": "Quote refreshes in {time}. We'll ask you to review any change.",
   "review.sendAnother": "Send from another wallet",
+  "review.solanaFee": "Your wallet charges a small Solana network fee. Review it before approving.",
+  "review.solanaRent":
+    "This payment also opens a token account for the deposit address: about {amount} (Solana rent), paid from your wallet.",
+  "review.solanaChecking": "Checking this token on Solana…",
+  "review.solanaError": "We couldn't reach the Solana network to prepare this payment.",
+  "review.solanaRetry": "Try again",
+  "review.solanaManualTitle": "This payment can't be sent from a Solana wallet here",
+  "review.solanaManual.memo": "It needs a memo, which wallet payments don't add. Send it from another wallet instead.",
+  "review.solanaManual.no_asset":
+    "The token couldn't be confirmed for a wallet payment. Send it from another wallet instead.",
+  "review.solanaManual.token":
+    "The token couldn't be confirmed for a wallet payment. Send it from another wallet instead.",
+  "review.solanaManual.mint_mismatch":
+    "The token's mint doesn't match the verified payment asset. Send it from another wallet instead.",
+  "review.solanaManual.token_2022":
+    "This token uses the Token-2022 program, which wallet payments here don't support yet. Send it from another wallet instead.",
+  "review.solanaManual.mint_unknown":
+    "The token's mint couldn't be found on Solana. Send it from another wallet instead.",
+  "txFailed.title": "Transaction failed in your wallet",
+  "txFailed.body":
+    "Your wallet couldn't send the transaction, so nothing was paid. Try again, or send from another wallet.",
+  "txFailed.badge": "Not sent",
+  "txFailed.retry": "Try again",
+  "txFailed.manual": "Send from another wallet instead",
   "updated.title": "Review your updated total",
   "updated.callout": "Your quote has changed",
   "updated.body": "The previous quote expired. Review the new total before approving in your wallet.",

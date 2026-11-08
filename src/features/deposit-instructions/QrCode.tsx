@@ -21,6 +21,7 @@ export function QrCode({ value, label }: { value: string; label: string }) {
       aria-label={label}
       shapeRendering="crispEdges"
       data-testid="qr"
+      {...(__NP_E2E__ ? { "data-value": value } : {})}
     >
       <rect width={size} height={size} fill="#fff" />
       <path d={d} fill="#000" />

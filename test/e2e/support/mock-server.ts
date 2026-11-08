@@ -80,6 +80,8 @@ export interface MockSession {
   feeAmount?: string | null;
   /** `Attestation.asset.token` (spec 0.2.1, signed); undefined = older sentinel. */
   attestToken?: { standard: string; address: string | null } | null;
+  /** Symbol/decimals sentinel attests (default USDC/6). */
+  attestMeta?: { symbol: string; decimals: number };
   streams: Set<ServerResponse>;
 }
 
@@ -153,6 +155,13 @@ const MIME: Record<string, string> = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".svg": "image/svg+xml",
+};
+
+/** Deposit addresses per chain (Solana: the solana-transfer.json vector's deposit). */
+export const DEPOSIT_BY_CHAIN: Record<string, string> = {
+  "near:mainnet": "f".repeat(64),
+  "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "F4d933S5Xkj1LZ7jQZHv2oVxc1YTiWswgBxeQYLcQ71x",
+  "bip122:000000000019d6689c085ae165831e93": "bc1qpct5sxzppv204tth290uen85nqkhzw9sq5m0ku",
 };
 
 let seq = 0;
@@ -600,7 +609,7 @@ export class MockNearPay {
       a = {
         ...base,
         deposit: {
-          address: chain === "near:mainnet" ? "f".repeat(64) : "0x76b4c56085ed136a8744d52be956396624a730e8",
+          address: DEPOSIT_BY_CHAIN[chain] ?? "0x76b4c56085ed136a8744d52be956396624a730e8",
           memo: s.memo,
           amount_in: option?.estimated_amount_in ?? "2005013",
           min_amount_in: "2000000",
@@ -656,8 +665,8 @@ export class MockNearPay {
                 s.attestAsset === "wrong"
                   ? "nep141:other.near"
                   : (a.deposit?.origin_asset_id ?? a.intents_requirement?.token),
-              symbol: "USDC",
-              decimals: 6,
+              symbol: s.attestMeta?.symbol ?? "USDC",
+              decimals: s.attestMeta?.decimals ?? 6,
               ...(s.attestToken !== undefined ? { token: s.attestToken } : {}),
             },
           }),

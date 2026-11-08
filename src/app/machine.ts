@@ -42,7 +42,7 @@ export type BlockReason =
   | "load_failed";
 
 export interface ConnectedWallet {
-  readonly family: "evm" | "near";
+  readonly family: "evm" | "near" | "solana";
   readonly address: string;
   readonly label: string;
 }

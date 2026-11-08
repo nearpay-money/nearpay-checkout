@@ -8,6 +8,7 @@ declare const __NP_CONFIG__: {
   readonly walletConnectProjectId: string;
   readonly nearNetwork: "mainnet" | "testnet";
   readonly nearRpcUrl: string;
+  readonly solanaRpcUrl: string;
 };
 /** True only in the mock-backed Playwright build (`vite build --mode e2e`). */
 declare const __NP_E2E__: boolean;

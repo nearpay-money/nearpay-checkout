@@ -1,14 +1,31 @@
 /** Which payment options a path can use (lld/checkout-and-js.md §3 `asset-picker`), search and network filter. */
 import type { Option, Path } from "../../app/machine";
 import { chainName, walletAsset } from "../../lib/chains/chains";
+import { parseOmftAssetId, SOLANA_MAINNET } from "../../lib/spec-gap-0.4.0";
 
 /** Wallet recipe of an option: derived from the attested asset id, else its typed token (CR-15-06). */
 export const optionWalletAsset = (o: Option) => walletAsset(o.origin_asset_id, o.chain, o.token);
 
-export function payableOptions(options: readonly Option[], path: Path, family: "evm" | "near" | null): Option[] {
+/**
+ * Solana wallet candidates (§11): route quotes on Solana for SOL or an SPL omft asset. Only a hint for
+ * the list — the recipe is decided from the verified attestation (`solanaRecipe`), never from the option.
+ */
+export function isSolanaWalletOption(o: Option): boolean {
+  if (o.method !== "route_quote" || o.chain !== SOLANA_MAINNET) return false;
+  const a = parseOmftAssetId(o.origin_asset_id);
+  return a !== null && a.blockchain === "sol" && (a.kind === "native" || a.kind === "hash20");
+}
+
+export function payableOptions(
+  options: readonly Option[],
+  path: Path,
+  family: "evm" | "near" | "solana" | null,
+): Option[] {
   const list = options.filter((o) => {
     if (path === "manual") return o.method === "route_quote";
-    if (o.method === "intents_transfer") return family !== null;
+    // Intents transfers are signed with NEP-413 (NEAR) or ERC-191 (EVM); Solana wallets can't sign them.
+    if (o.method === "intents_transfer") return family === "evm" || family === "near";
+    if (family === "solana") return isSolanaWalletOption(o);
     const asset = optionWalletAsset(o);
     if (!asset) return false;
     return family === "evm"

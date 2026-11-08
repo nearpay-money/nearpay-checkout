@@ -23,6 +23,7 @@ export type ScreenId =
   | "approve_in_wallet" // a00 "Approve in your wallet"
   | "not_approved" // a01 "Payment not approved"
   | "not_enough_funds" // a01 "Not enough funds"
+  | "tx_failed" // "Transaction failed in your wallet" (Solana send error, §11: Retry / Send from another wallet)
   | "send_manual" // a00/a01 "Send 49.49 USDC" (network callout, I'm sending on…, deposit address, exact amount)
   | "received_less" // a03 "We received less than expected"
   | "address_expired" // a03 "This address has expired"
@@ -49,6 +50,8 @@ export interface ScreenContext {
 
 const WAITING = new Set(["awaiting_deposit", "quoting"]);
 export const INSUFFICIENT_FUNDS = "insufficient_funds";
+/** The wallet could not send the transaction (not a rejection, not a balance error). */
+export const TX_FAILED = "tx_failed";
 
 export function screenFor(s: State, ctx: ScreenContext): ScreenId {
   switch (s.phase) {
@@ -73,6 +76,7 @@ export function screenFor(s: State, ctx: ScreenContext): ScreenId {
       if (s.session && !s.session.livemode) return "test_payment";
       if (s.error?.code === INSUFFICIENT_FUNDS) return "not_enough_funds";
       if (s.error?.code === "wallet_rejected") return "not_approved";
+      if (s.error?.code === TX_FAILED) return "tx_failed";
       if (ctx.busy) return "approve_in_wallet";
       return ctx.totalChanged ? "review_updated" : "review";
     case "pay_manual":
@@ -105,7 +109,15 @@ export const PHASE_SCREENS: Readonly<Record<State["phase"], readonly ScreenId[]>
   confirming: ["verifying"],
   verifying: ["verifying"],
   verify_failed: ["verify_failed"],
-  pay_wallet: ["review", "review_updated", "test_payment", "approve_in_wallet", "not_approved", "not_enough_funds"],
+  pay_wallet: [
+    "review",
+    "review_updated",
+    "test_payment",
+    "approve_in_wallet",
+    "not_approved",
+    "not_enough_funds",
+    "tx_failed",
+  ],
   pay_manual: ["send_manual"],
   needs_top_up: ["received_less"],
   expired_address: ["quote_expired", "address_expired"],

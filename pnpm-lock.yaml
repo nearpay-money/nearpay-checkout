@@ -25,6 +25,12 @@ importers:
       "@noble/hashes":
         specifier: 2.4.0
         version: 2.4.0
+      "@wallet-standard/app":
+        specifier: 1.1.1
+        version: 1.1.1
+      "@wallet-standard/base":
+        specifier: 1.1.1
+        version: 1.1.1
       bs58:
         specifier: 6.0.0
         version: 6.0.0
@@ -629,6 +635,16 @@ packages:
   "@vitest/utils@2.1.9":
     resolution:
       { integrity: sha512-v0psaMSkNJ3A2NMrUEHFRzJtDPFn+/VWZ5WxImB21T9fjucJRmS7xCS3ppEnARb9y11OAzaD+P2Ps+b+BGX5iQ== }
+
+  "@wallet-standard/app@1.1.1":
+    resolution:
+      { integrity: sha512-WDGwoByhP5gwHH01r5EaLgQdLVkACPCdOMQhmhn8rsm10h/siSgTorShzBxrn0ExSPof+Lu+C3TfgqBrPa1xoQ== }
+    engines: { node: ">=22" }
+
+  "@wallet-standard/base@1.1.1":
+    resolution:
+      { integrity: sha512-gggIHTtxicF9XFMQ12DkfS6NAG92Ak795JeSA7f2whAQ6Y3AkMWWuCMxSZXG2NIPN42kEaZSNVjqMsJRaJRxMQ== }
+    engines: { node: ">=22" }
 
   ansi-regex@5.0.1:
     resolution:
@@ -1464,6 +1480,12 @@ snapshots:
       "@vitest/pretty-format": 2.1.9
       loupe: 3.2.1
       tinyrainbow: 1.2.0
+
+  "@wallet-standard/app@1.1.1":
+    dependencies:
+      "@wallet-standard/base": 1.1.1
+
+  "@wallet-standard/base@1.1.1": {}
 
   ansi-regex@5.0.1: {}
 
