@@ -5,7 +5,7 @@
  */
 import { formatMoney, type MoneyFormatOptions } from "@nearpay-internal/ui";
 import { chainName } from "../lib/chains/chains";
-import { type AssetMeta, assetMeta, priceMoney, statedFee, totalToSend } from "../lib/money/display";
+import { type AssetMeta, assetMeta, payerFee, priceMoney, pricingAssetMeta, totalToSend } from "../lib/money/display";
 import type { Checkout } from "./useCheckout";
 
 export interface ViewModel {
@@ -43,7 +43,13 @@ export function buildModel(c: Checkout): ViewModel {
   const s = c.state.session;
   const att = c.state.verified?.attestation ?? c.trusted?.attestation ?? null;
   const options = [c.state.option, c.originMeta, ...(c.state.options ?? [])];
-  const pricing = s?.asset_id ? assetMeta(s.asset_id, att, options) : null;
+  // Asset-priced sessions: attested display data for the same asset wins, then the session's
+  // `pricing_asset` (spec 0.2.1), then the payment options.
+  const pricing = s?.asset_id
+    ? (assetMeta(s.asset_id, att, []) ??
+      pricingAssetMeta(s.asset_id, s.pricing_asset) ??
+      assetMeta(s.asset_id, null, options))
+    : null;
   const price = s ? priceMoney(s, pricing) : null;
   const priceText = s ? moneyText(price, `${String(s.amount)} base units`) : "";
   const destAsset = att ? assetMeta(att.destination.asset_id, null, options) : null;
@@ -62,7 +68,7 @@ export function buildModel(c: Checkout): ViewModel {
       : null,
     asset: c.assetMeta,
     total: c.state.verified ? totalToSend(c.state.verified.attestation) : null,
-    fee: c.state.verified ? statedFee(c.state.verified.attestation) : null,
+    fee: c.state.verified ? payerFee(c.state.verified.attestation, c.state.attempt) : null,
     chain: c.state.verified
       ? (c.state.verified.attestation.deposit?.chain ?? "near:mainnet")
       : (c.trusted?.attestation.deposit?.chain ?? (c.trusted ? "near:mainnet" : null)),

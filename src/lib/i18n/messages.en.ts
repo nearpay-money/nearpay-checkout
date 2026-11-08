@@ -28,6 +28,7 @@ export const en = {
   "summary.total": "Total",
   "summary.fees": "Payment fees",
   "summary.feesIncluded": "Included in total",
+  "summary.feesNone": "None",
   "summary.totalToSend": "Total to send",
   "summary.youSend": "You send",
 
@@ -204,6 +205,8 @@ export const en = {
   "less.body":
     "Send the remaining amount to the same address before it expires, or your transfer is returned to your refund wallet. Don't send more than the difference.",
   "less.expected": "Expected",
+  "less.received": "Received",
+  "less.remaining": "Still to send",
 
   "expired.title": "This address has expired",
   "expired.callout": "Do not send to the old address",

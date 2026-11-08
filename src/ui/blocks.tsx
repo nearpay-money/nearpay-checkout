@@ -1,16 +1,15 @@
 /**
- * Checkout compositions on top of `@nearpay-internal/ui`. Only what the kit lacks lives here (listed as
- * kit gaps in the step 2.3 report): `OptionButton` (a token/wallet row that is a button, not a radio —
- * tapping it moves on), `StateScreen` (icon + title + lede + badge + callout + actions, the shape of
- * every status frame in the Figma), `CopyTextButton` (copy a short value with a polite announcement).
+ * Checkout compositions on top of `@nearpay-internal/ui`. Since ui 0.3.0 `OptionButton` and `StateScreen`
+ * are thin wrappers over the kit components (adding the checkout-only states the kit lacks);
+ * `CopyTextButton` (copy a short value as a full-width button with a polite announcement) stays local.
  */
 import {
-  Avatar,
   Button,
   type ButtonProps,
   Callout,
-  ChevronRightIcon,
   cx,
+  OptionButton as KitOptionButton,
+  StateScreen as KitStateScreen,
   LiveRegion,
   Spinner,
   StatusBadge,
@@ -32,7 +31,10 @@ export interface OptionButtonProps {
   className?: string;
 }
 
-/** A selectable row styled like the kit's OptionCard, as a button (tap = continue). */
+/**
+ * A token/wallet row that is a button (tap = continue): the kit's `OptionButton` (ui 0.3.0) plus the
+ * checkout's selected / pending / disabled states (kit gap: no `selected` or `pending` props).
+ */
 export function OptionButton({
   title,
   description,
@@ -45,30 +47,18 @@ export function OptionButton({
   className,
 }: OptionButtonProps) {
   return (
-    <button
-      type="button"
-      className={cx(
-        "np-option",
-        "ck-option-button",
-        selected && "np-option--selected",
-        disabled && "np-option--disabled",
-        className,
-      )}
+    <KitOptionButton
+      title={title}
+      description={description}
+      avatar={avatar}
+      trailing={pending ? <Spinner /> : disabled ? <span /> : undefined}
+      className={cx(selected && "np-option--selected", disabled && "np-option--disabled", className)}
       disabled={disabled}
       aria-pressed={selected === undefined ? undefined : selected}
       aria-busy={pending || undefined}
       onClick={onClick}
       data-testid={testId}
-    >
-      {typeof avatar === "string" ? <Avatar initial={avatar} size="sm" /> : avatar}
-      <span className="np-option__text">
-        <span className="np-option__title">{title}</span>
-        {description ? <span className="np-option__description">{description}</span> : null}
-      </span>
-      <span className="np-option__indicator" aria-hidden="true">
-        {pending ? <Spinner /> : disabled ? null : <ChevronRightIcon size={16} />}
-      </span>
-    </button>
+    />
   );
 }
 
@@ -90,7 +80,11 @@ export interface StateScreenProps {
   live?: boolean;
 }
 
-/** The status frame of the Figma: divider, icon, title, lede, badge, callout with reference, actions. */
+/**
+ * The status frame of the Figma (divider, icon, title, lede, badge, callout with reference, actions) on
+ * the kit's `StateScreen` (ui 0.3.0); adds the divider under the amount hero and content between the
+ * callout and the actions (kit gap: no slot there).
+ */
 export function StateScreen({
   icon,
   title,
@@ -105,20 +99,27 @@ export function StateScreen({
   testId,
   live = true,
 }: StateScreenProps) {
+  const titleId = testId ? `${testId}-title` : undefined;
   return (
-    <section className="ck-screen" data-testid={testId} aria-labelledby={testId ? `${testId}-title` : undefined}>
+    <section className="ck-screen" data-testid={testId} aria-labelledby={titleId}>
       {icon ? <hr className="np-divider" /> : null}
-      <div className="np-stack">
-        {icon ? <span className="np-checkout__state-icon">{icon}</span> : null}
-        <h1 className="np-checkout__title" id={testId ? `${testId}-title` : undefined}>
-          {title}
-        </h1>
-        {body ? <p className="np-checkout__lede">{body}</p> : null}
-        {badge ? <StatusBadge {...(badgeTone ? { tone: badgeTone } : {})}>{badge}</StatusBadge> : null}
-      </div>
-      {callout ? <Callout tone={calloutTone} title={callout} reference={reference} live={live} /> : null}
-      {children}
-      {actions ? <div className="np-stack">{actions}</div> : null}
+      <KitStateScreen
+        icon={icon}
+        title={<span id={titleId}>{title}</span>}
+        badge={badge ? <StatusBadge {...(badgeTone ? { tone: badgeTone } : {})}>{badge}</StatusBadge> : undefined}
+        callout={
+          callout || children ? (
+            <>
+              {callout ? <Callout tone={calloutTone} title={callout} reference={reference} live={live} /> : null}
+              {children}
+            </>
+          ) : undefined
+        }
+        actions={actions}
+        live={live}
+      >
+        {body}
+      </KitStateScreen>
     </section>
   );
 }

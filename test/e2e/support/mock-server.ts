@@ -70,6 +70,10 @@ export interface MockSession {
   attestAsset: "yes" | "no" | "wrong";
   /** Delay before sentinel answers (screenshots of "Verifying this checkout"). */
   attestDelayMs: number;
+  /** `DepositInstructions.fee_amount` of route-quote attempts (spec 0.2.1); undefined = older server. */
+  feeAmount?: string | null;
+  /** `Attestation.asset.token` (spec 0.2.1, signed); undefined = older sentinel. */
+  attestToken?: { standard: string; address: string | null } | null;
   streams: Set<ServerResponse>;
 }
 
@@ -465,6 +469,7 @@ export class MockNearPay {
           deadline,
           chain,
           origin_asset_id: body.origin_asset_id as string,
+          ...(s.feeAmount !== undefined ? { fee_amount: s.feeAmount } : {}),
         },
       };
     }
@@ -515,6 +520,7 @@ export class MockNearPay {
                   : (a.deposit?.origin_asset_id ?? a.intents_requirement?.token),
               symbol: "USDC",
               decimals: 6,
+              ...(s.attestToken !== undefined ? { token: s.attestToken } : {}),
             },
           }),
       merchant: { name: "Acme GmbH", kyb_verified: true },

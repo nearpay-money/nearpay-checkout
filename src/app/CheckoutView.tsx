@@ -313,11 +313,14 @@ function summaryFor(vm: ViewModel, wide: boolean, hasMerchant: boolean, loaded: 
             ? [
                 {
                   label: t("summary.fees"),
-                  value: vm.fee ? (
-                    <Money {...(assetMoney(vm.fee, vm.asset) ?? { amount: vm.fee, decimals: 0 })} />
-                  ) : (
-                    t("summary.feesIncluded")
-                  ),
+                  value:
+                    vm.fee === "0" ? (
+                      t("summary.feesNone")
+                    ) : vm.fee ? (
+                      <Money {...(assetMoney(vm.fee, vm.asset) ?? { amount: vm.fee, decimals: 0 })} />
+                    ) : (
+                      t("summary.feesIncluded")
+                    ),
                 },
                 {
                   label: t("summary.totalToSend"),

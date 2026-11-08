@@ -11,9 +11,12 @@ import {
   assetMeta,
   currencySymbol,
   paidAssetId,
+  payerFee,
   priceMoney,
-  statedFee,
+  pricingAssetMeta,
+  receivedSoFar,
   totalToSend,
+  walletTokenHint,
 } from "../../src/lib/money/display";
 import { attemptFor, PINNED, sentinelVectors, signAttestation, VECTOR_TIME } from "../support/fixtures";
 import { attempt, SECRET, SESSION_ID, session, USDC_BASE, USDC_NEAR } from "../support/sessions";
@@ -267,17 +270,67 @@ describe("display helpers", () => {
   it("totals and fees from the attestation", () => {
     const route = { kind: "route_quote", deposit: { amount_in: "2005013", origin_asset_id: USDC_BASE } } as never;
     expect(totalToSend(route)).toBe("2005013");
-    expect(statedFee(route)).toBeNull();
+    expect(payerFee(route, null)).toBeNull();
     expect(paidAssetId(route)).toBe(USDC_BASE);
     const intents = {
       kind: "intents_transfer",
       requirement: { amount: "2000000", fee_amount: "6000", token: USDC_NEAR },
     } as never;
     expect(totalToSend(intents)).toBe("2006000");
-    expect(statedFee(intents)).toBe("6000");
+    expect(payerFee(intents, null)).toBe("6000");
     expect(paidAssetId(intents)).toBe(USDC_NEAR);
     expect(totalToSend({ kind: "intents_transfer" } as never)).toBeNull();
     expect(paidAssetId({ kind: "route_quote" } as never)).toBeNull();
+  });
+
+  it("route-quote payer fee from the verified attempt's fee_amount (spec 0.2.1, display only)", () => {
+    const att = {
+      kind: "route_quote",
+      attempt_id: "pa_1",
+      deposit: { amount_in: "2005013", origin_asset_id: USDC_BASE },
+    } as never;
+    const attempt = (fee: string | null | undefined, id = "pa_1", amount_in = "2005013") => ({
+      id,
+      deposit: { amount_in, fee_amount: fee },
+    });
+    expect(payerFee(att, attempt("5013"))).toBe("5013");
+    expect(payerFee(att, attempt("0"))).toBe("0");
+    expect(payerFee(att, attempt(null))).toBeNull();
+    expect(payerFee(att, attempt(undefined))).toBeNull();
+    // Another attempt, a fee above the attested total, malformed or a stale amount: "Included in total".
+    expect(payerFee(att, attempt("5013", "pa_2"))).toBeNull();
+    expect(payerFee(att, attempt("9999999"))).toBeNull();
+    expect(payerFee(att, attempt("1.5"))).toBeNull();
+    expect(payerFee(att, attempt("5013", "pa_1", "2000000"))).toBeNull();
+  });
+
+  it("received so far for an incomplete deposit (spec 0.2.1 amount_received)", () => {
+    expect(receivedSoFar("2005013", "1000000")).toEqual({ received: "1000000", remaining: "1005013" });
+    expect(receivedSoFar("2005013", "2005013")).toEqual({ received: "2005013", remaining: null });
+    expect(receivedSoFar("2005013", "3000000")).toEqual({ received: "3000000", remaining: null });
+    expect(receivedSoFar("2005013", null)).toBeNull();
+    expect(receivedSoFar("2005013", undefined)).toBeNull();
+    expect(receivedSoFar("2005013", "-1")).toBeNull();
+  });
+
+  it("pricing-asset display only for the priced asset (spec 0.2.1)", () => {
+    const p = { asset_id: USDC_NEAR, symbol: "USDC", decimals: 6 };
+    expect(pricingAssetMeta(USDC_NEAR, p)).toEqual({ ...p, source: "pricing" });
+    expect(pricingAssetMeta(USDC_BASE, p)).toBeNull();
+    expect(pricingAssetMeta(null, p)).toBeNull();
+    expect(pricingAssetMeta(USDC_NEAR, null)).toBeNull();
+    expect(pricingAssetMeta(USDC_NEAR, undefined)).toBeNull();
+  });
+
+  it("wallet token: the attested Attestation.asset.token wins over the option's (spec 0.2.1)", () => {
+    const optionToken = { standard: "erc20", address: "0x0000000000000000000000000000000000000001" };
+    const signed = { standard: "erc20", address: "0x0000000000000000000000000000000000000002" };
+    const asset = { asset_id: USDC_BASE, symbol: "USDC", decimals: 6 };
+    expect(walletTokenHint({ asset: { ...asset, token: signed } } as never, optionToken)).toBe(signed);
+    expect(walletTokenHint({ asset: { ...asset, token: null } } as never, optionToken)).toBeNull();
+    expect(walletTokenHint({ asset } as never, optionToken)).toBe(optionToken);
+    expect(walletTokenHint(null, optionToken)).toBe(optionToken);
+    expect(walletTokenHint(null, undefined)).toBeUndefined();
   });
 
   it("prices in fiat and assets without floats", () => {
