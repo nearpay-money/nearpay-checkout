@@ -14,7 +14,7 @@ import { t } from "../../lib/i18n/t";
 import { assetMoney, receivedSoFar, walletTokenHint } from "../../lib/money/display";
 import { CopyTextButton, ScreenTitle } from "../../ui/blocks";
 import { QrCode } from "./QrCode";
-import { qrPayload } from "./qr";
+import { paymentUri, qrPayload } from "./qr";
 import { withCountdown } from "./WalletPay";
 
 export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewModel; topUp: boolean }) {
@@ -131,7 +131,10 @@ export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewMode
               footer={
                 <div className="ck-deposit__footer">
                   {expires}
-                  <QrCode value={qrPayload(d.address, d.amount_in, recipe)} label={t("deposit.qr")} />
+                  <QrCode
+                    value={paymentUri(v.attestation) ?? qrPayload(d.address, d.amount_in, recipe)}
+                    label={t("deposit.qr")}
+                  />
                 </div>
               }
             />

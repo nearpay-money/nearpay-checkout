@@ -9,6 +9,7 @@ import {
   getPublicCheckoutSession,
   INTENTS_CONTRACT,
   listPaymentOptions,
+  SOLANA_MAINNET,
   signalDepositSent,
   simulateDeposit,
   submitDepositTx,
@@ -35,6 +36,14 @@ import {
 } from "../wallets/intents/message";
 import { currentSalt, storageBalanceBounds, storageBalanceOf } from "../wallets/near/rpc";
 import { depositTxHash, nearDepositTransactions } from "../wallets/near/tx";
+import { accountOwner, latestBlockhash, type MintProgram, mintProgram, tokenAccountRent } from "../wallets/solana/rpc";
+import {
+  associatedTokenAddress,
+  type SolanaManualReason,
+  type SolanaRecipe,
+  solanaPaymentTransaction,
+  solanaRecipe,
+} from "../wallets/solana/tx";
 import {
   type BlockReason,
   hasLiveInstructions,
@@ -44,7 +53,7 @@ import {
   reducer,
   type State,
 } from "./machine";
-import { INSUFFICIENT_FUNDS } from "./screens";
+import { INSUFFICIENT_FUNDS, TX_FAILED } from "./screens";
 
 export interface CheckoutParams {
   readonly sessionId: string;
@@ -92,16 +101,44 @@ export interface Checkout {
   readonly previousTotal: string | null;
   /** Option of the expired wallet quote, re-selected automatically after "Get a new quote". */
   readonly requoteKey: string | null;
+  /** Solana wallet path readiness for the verified quote (§11); null for other wallets. */
+  readonly solana: SolanaPrep | null;
+  /** Re-run the Solana checks after an RPC error. */
+  readonly retrySolana: () => void;
+}
+
+/**
+ * Solana wallet path after verification (§11): `checking` (RPC: mint owner, deposit token account),
+ * `ready` (with the token-account rent the payer adds, when the deposit ATA does not exist yet),
+ * `manual` (no wallet recipe — memo, Token-2022, unreconciled mint …: manual path only), `error` (RPC).
+ */
+export type SolanaPrep =
+  | { readonly state: "checking" }
+  | { readonly state: "ready"; readonly recipe: SolanaRecipe; readonly rentLamports: string | null }
+  | { readonly state: "manual"; readonly reason: SolanaManualReason }
+  | { readonly state: "error" };
+
+/** Field equality of two Solana recipes (kind, deposit, amount, mint, decimals). */
+export function sameRecipe(a: SolanaRecipe, b: SolanaRecipe): boolean {
+  if (a.kind === "sol" || b.kind === "sol") {
+    return a.kind === "sol" && b.kind === "sol" && a.deposit === b.deposit && a.lamports === b.lamports;
+  }
+  return a.deposit === b.deposit && a.mint === b.mint && a.amount === b.amount && a.decimals === b.decimals;
 }
 
 function errorCode(e: unknown): string {
   if (e instanceof WalletRejected) return "wallet_rejected";
   if (isApiError(e)) return e.code === "insufficient_balance" ? INSUFFICIENT_FUNDS : e.code;
   // Wallets report a short balance as an RPC error ("insufficient funds for gas * price + value",
-  // "Not enough balance", NEAR "NotEnoughBalance").
-  if (e instanceof Error && /insufficient (funds|balance)|not ?enough ?balance/i.test(e.message)) {
+  // "Not enough balance", NEAR "NotEnoughBalance", Solana "insufficient lamports" / "no record of a
+  // prior credit").
+  if (
+    e instanceof Error &&
+    /insufficient (funds|balance|lamports)|not ?enough ?balance|no record of a prior credit/i.test(e.message)
+  ) {
     return INSUFFICIENT_FUNDS;
   }
+  if (e instanceof Error && e.name === "SolanaSendFailed") return TX_FAILED;
   return "generic";
 }
 
@@ -166,7 +203,10 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     const family = connected?.family ?? null;
     const query: Record<string, string | undefined> =
       path === "wallet" && connected
-        ? { wallet: connected.address, chain: family === "near" ? NEAR_MAINNET : undefined }
+        ? {
+            wallet: connected.address,
+            chain: family === "near" ? NEAR_MAINNET : family === "solana" ? SOLANA_MAINNET : undefined,
+          }
         : {};
     call(listPaymentOptions, { params: { id: sessionId }, query, secret })
       .then((r) => !cancelled && dispatch({ type: "options_loaded", options: payableOptions(r.options, path, family) }))
@@ -271,6 +311,56 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     return () => clearTimeout(t);
   }, [validUntil]);
 
+  // ---- Solana wallet path checks (§11) ----------------------------------------------------------------
+  const [solana, setSolana] = useState<SolanaPrep | null>(null);
+  const [solanaRun, setSolanaRun] = useState(0);
+  const solanaWallet = state.phase === "pay_wallet" && state.wallet?.family === "solana";
+  const livemode = state.session?.livemode ?? false;
+  useEffect(() => {
+    void solanaRun; // "Try again" after an RPC error re-runs the checks
+    if (!solanaWallet || !verified) {
+      setSolana(null);
+      return;
+    }
+    const r = solanaRecipe(verified.attestation);
+    if (!r) {
+      setSolana({ state: "manual", reason: "token" });
+      return;
+    }
+    if (!r.ok) {
+      setSolana({ state: "manual", reason: r.reason });
+      return;
+    }
+    const recipe = r.recipe;
+    // Test mode never broadcasts (§5.8): no RPC reads either.
+    if (!livemode || recipe.kind === "sol") {
+      setSolana({ state: "ready", recipe, rentLamports: null });
+      return;
+    }
+    let cancelled = false;
+    setSolana({ state: "checking" });
+    const url = config.solanaRpcUrl;
+    void (async () => {
+      try {
+        const program: MintProgram = await mintProgram(url, recipe.mint);
+        if (cancelled) return;
+        if (program !== "token") {
+          setSolana({ state: "manual", reason: program === "token_2022" ? "token_2022" : "mint_unknown" });
+          return;
+        }
+        const ata = associatedTokenAddress(recipe.deposit, recipe.mint).address;
+        const exists = (await accountOwner(url, ata)) !== null;
+        const rent = exists ? null : await tokenAccountRent(url);
+        if (!cancelled) setSolana({ state: "ready", recipe, rentLamports: rent });
+      } catch {
+        if (!cancelled) setSolana({ state: "error" });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [solanaWallet, verified, livemode, solanaRun]);
+
   // ---- actions ----------------------------------------------------------------------------------------
   const reload = useCallback(async () => {
     try {
@@ -289,7 +379,7 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       const w = wallet.current;
       let body: Record<string, string>;
       if (o.method === "intents_transfer") {
-        if (!w) return;
+        if (!w || w.family === "solana") return;
         body = {
           method: o.method,
           origin_asset_id: o.origin_asset_id,
@@ -332,7 +422,23 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     dispatch({ type: "error", error: null });
     try {
       const att = v.attestation;
-      if (att.kind === "route_quote" && att.deposit) {
+      if (w.family === "solana") {
+        // §11: only the recipe derived from the verified attestation (and checked over RPC) is sent.
+        // The RPC-checked recipe must be the one of THIS verified attestation (a re-quote re-runs the checks).
+        const fresh = solanaRecipe(att);
+        if (solana?.state !== "ready" || !fresh?.ok || !sameRecipe(fresh.recipe, solana.recipe)) {
+          throw new Error("This payment can't be sent from a Solana wallet.");
+        }
+        const blockhash = await latestBlockhash(config.solanaRpcUrl);
+        const tx = solanaPaymentTransaction(solana.recipe, w.address, blockhash);
+        const signature = await w.wallet.signAndSendTransaction(tx);
+        dispatch({ type: "paid" });
+        await call(submitDepositTx, {
+          params: { id: sessionId, attempt: a.id },
+          body: { tx_hash: signature },
+          secret,
+        }).catch(() => undefined);
+      } else if (att.kind === "route_quote" && att.deposit) {
         const d = att.deposit;
         // The recipe comes from the attested asset id; the signed `Attestation.asset.token` (spec 0.2.1)
         // wins, else the option's typed token (CR-15-06) — only when that option describes the same
@@ -396,7 +502,7 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     } finally {
       setBusy(false);
     }
-  }, [state, sessionId, secret, originMeta]);
+  }, [state, sessionId, secret, originMeta, solana]);
 
   const signalSent = useCallback(async () => {
     const a = state.attempt;
@@ -476,6 +582,8 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     trusted,
     previousTotal: state.phase === "pay_wallet" ? previousTotal : null,
     requoteKey,
+    solana,
+    retrySolana: () => setSolanaRun((n) => n + 1),
   };
 }
 

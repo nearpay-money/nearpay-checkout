@@ -5,6 +5,8 @@
  * broadcast — §5.8), approve in your wallet, not approved, not enough funds. Every amount shown is the
  * ATTESTED one.
  */
+
+import { formatBaseUnits } from "@nearpay/spec";
 import {
   Button,
   Callout,
@@ -15,6 +17,7 @@ import {
   Money,
   SelectionCard,
   WalletIcon,
+  WarningIcon,
 } from "@nearpay-internal/ui";
 import type { ReactNode } from "react";
 import { moneyText, referenceText, type ViewModel } from "../../app/model";
@@ -106,12 +109,19 @@ function Totals({ c, vm, compact = false }: { c: Checkout; vm: ViewModel; compac
       ];
   const att = c.state.verified?.attestation;
   const evm = att?.kind === "route_quote" && att.deposit && getChain(att.deposit.chain)?.family === "evm";
+  const sol = c.state.wallet?.family === "solana";
+  const rent = c.solana?.state === "ready" ? c.solana.rentLamports : null;
   return (
     <div className="np-stack np-stack--sm">
       <KeyValueList items={items} />
-      <p className="np-checkout__note">
-        {att?.kind === "intents_transfer" ? t("review.intentsFee") : t("review.walletFee")}
+      <p className="np-checkout__note" data-testid="network-fee-note">
+        {att?.kind === "intents_transfer"
+          ? t("review.intentsFee")
+          : sol
+            ? t("review.solanaFee")
+            : t("review.walletFee")}
         {evm && att?.deposit ? ` ${t("review.switchChain", { chain: chainName(att.deposit.chain) })}` : ""}
+        {rent ? ` ${t("review.solanaRent", { amount: `${formatBaseUnits(rent, 9)} SOL` })}` : ""}
       </p>
     </div>
   );
@@ -137,7 +147,13 @@ export function WalletPay({
   vm: ViewModel;
   screen: Extract<
     ScreenId,
-    "review" | "review_updated" | "test_payment" | "approve_in_wallet" | "not_approved" | "not_enough_funds"
+    | "review"
+    | "review_updated"
+    | "test_payment"
+    | "approve_in_wallet"
+    | "not_approved"
+    | "not_enough_funds"
+    | "tx_failed"
   >;
   /** Desktop review: also offer "Send from another wallet". */
   wide: boolean;
@@ -182,6 +198,30 @@ export function WalletPay({
             </Button>
             <Button fullWidth variant="secondary" onClick={actions.change}>
               {t("funds.change")}
+            </Button>
+          </>
+        }
+      />
+    );
+  }
+
+  if (screen === "tx_failed") {
+    return (
+      <StateScreen
+        testId="wallet-pay"
+        icon={<WarningIcon />}
+        title={t("txFailed.title")}
+        body={t("txFailed.body")}
+        badge={t("txFailed.badge")}
+        callout={c.state.error?.param ? t("wallet.failed", { message: c.state.error.param }) : undefined}
+        reference={ref}
+        actions={
+          <>
+            <Button fullWidth onClick={actions.clearError} data-testid="try-again">
+              {t("txFailed.retry")}
+            </Button>
+            <Button fullWidth variant="secondary" onClick={actions.useManual} data-testid="use-manual">
+              {t("txFailed.manual")}
             </Button>
           </>
         }
@@ -263,6 +303,7 @@ export function WalletPay({
     );
   }
 
+  const sol = c.solana;
   return (
     <section className="ck-screen" data-testid="wallet-pay" aria-labelledby="ck-review-title">
       <h1 className={wide ? "ck-review-title" : "np-sr-only"} id="ck-review-title">
@@ -270,11 +311,34 @@ export function WalletPay({
       </h1>
       <Selection c={c} vm={vm} disabled={busy} />
       <Totals c={c} vm={vm} compact={wide} />
+      {sol?.state === "manual" ? (
+        <Callout tone="warning" title={t("review.solanaManualTitle")} live data-testid="solana-manual-only">
+          {t(`review.solanaManual.${sol.reason}`)}
+        </Callout>
+      ) : sol?.state === "error" ? (
+        <Callout tone="danger" title={t("review.solanaError")} live data-testid="solana-rpc-error" />
+      ) : null}
       <div className="np-stack">
-        <Button fullWidth onClick={() => void actions.payWithWallet()} data-testid="wallet-send">
-          {payLabel}
-        </Button>
-        {wide ? (
+        {sol?.state === "manual" ? (
+          <Button fullWidth onClick={actions.useManual} data-testid="use-manual">
+            {t("txFailed.manual")}
+          </Button>
+        ) : sol?.state === "error" ? (
+          <Button fullWidth onClick={c.retrySolana} data-testid="solana-retry">
+            {t("review.solanaRetry")}
+          </Button>
+        ) : (
+          <Button
+            fullWidth
+            onClick={() => void actions.payWithWallet()}
+            loading={sol?.state === "checking"}
+            loadingText={t("review.solanaChecking")}
+            data-testid="wallet-send"
+          >
+            {payLabel}
+          </Button>
+        )}
+        {wide && sol?.state !== "manual" ? (
           <Button fullWidth variant="secondary" onClick={actions.useManual} data-testid="use-manual">
             {t("review.sendAnother")}
           </Button>

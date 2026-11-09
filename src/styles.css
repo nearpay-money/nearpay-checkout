@@ -346,3 +346,56 @@ html[data-theme="dark"] {
   font-size: var(--np-text-body);
   line-height: 24px;
 }
+
+/* Hosted invoice auto-pay (Stage 4, lld/checkout-and-js.md §4.4). */
+.ck-autopay-entry {
+  padding-top: var(--np-space-4);
+  border-top: 1px solid var(--np-color-border);
+}
+
+.ck-autopay-entry__title {
+  margin: 0;
+  font-size: var(--np-text-body);
+  font-weight: var(--np-weight-semibold);
+  color: var(--np-color-text);
+}
+
+.ck-autopay-facts {
+  margin: 0;
+  padding-left: var(--np-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-space-2);
+  color: var(--np-color-text-secondary);
+  font-size: var(--np-text-small);
+}
+
+.ck-autopay-signer {
+  display: flex;
+  align-items: center;
+  gap: var(--np-space-3);
+  padding: var(--np-space-3) var(--np-space-4);
+  border: 1px solid var(--np-color-border);
+  border-radius: var(--np-radius-control);
+  color: var(--np-color-text);
+}
+
+.ck-autopay-signer__text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ck-autopay-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--np-space-3);
+}
+
+.ck-autopay-mono {
+  font-family: var(--np-font-mono);
+  font-size: var(--np-text-small);
+  overflow-wrap: anywhere;
+  text-align: right;
+}

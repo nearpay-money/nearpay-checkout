@@ -23,6 +23,8 @@ export interface CheckoutBuildConfig {
   readonly walletConnectProjectId: string;
   readonly nearNetwork: "mainnet" | "testnet";
   readonly nearRpcUrl: string;
+  /** Solana JSON-RPC for the Solana wallet path (§11): recent blockhash, mint owner, token accounts. */
+  readonly solanaRpcUrl: string;
   readonly e2e: boolean;
 }
 
@@ -105,6 +107,8 @@ export function resolveConfig(
     env.VITE_NEAR_RPC_URL ??
     (nearNetwork === "mainnet" ? "https://free.rpc.fastnear.com" : "https://test.rpc.fastnear.com");
   absoluteOrigin(nearRpcUrl, "VITE_NEAR_RPC_URL");
+  const solanaRpcUrl = env.VITE_SOLANA_RPC_URL ?? "https://api.mainnet-beta.solana.com";
+  if (!absoluteOrigin(solanaRpcUrl, "VITE_SOLANA_RPC_URL")) throw new Error("VITE_SOLANA_RPC_URL must be absolute");
   return {
     apiOrigin,
     sentinelKeys: resolveSentinelKeys(env, root, e2e),
@@ -112,6 +116,7 @@ export function resolveConfig(
     walletConnectProjectId: env.VITE_WALLETCONNECT_PROJECT_ID ?? "",
     nearNetwork,
     nearRpcUrl,
+    solanaRpcUrl,
     e2e,
   };
 }
@@ -134,6 +139,8 @@ export function contentSecurityPolicy(c: CheckoutBuildConfig): string {
   if (api) connect.add(api);
   const rpc = absoluteOrigin(c.nearRpcUrl, "VITE_NEAR_RPC_URL");
   if (rpc) connect.add(rpc);
+  const sol = absoluteOrigin(c.solanaRpcUrl, "VITE_SOLANA_RPC_URL");
+  if (sol) connect.add(sol);
   for (const h of NEAR_CONNECT_HOSTS) connect.add(h);
   const nonce = `'nonce-${CSP_NONCE_PLACEHOLDER}'`;
   return [

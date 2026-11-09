@@ -22,10 +22,12 @@
   },
   "dependencies": {
     "@hot-labs/near-connect": "0.11.4",
-    "@nearpay-internal/ui": "0.3.0",
-    "@nearpay/spec": "0.3.0",
+    "@nearpay-internal/ui": "0.3.1",
+    "@nearpay/spec": "0.4.0",
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
+    "@wallet-standard/app": "1.1.1",
+    "@wallet-standard/base": "1.1.1",
     "bs58": "6.0.0",
     "canonicalize": "5.1.0",
     "react": "19.1.10",
@@ -46,7 +48,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@nearpay/spec": "0.3.0"
+      "@nearpay/spec": "0.4.0"
     },
     "onlyBuiltDependencies": [
       "esbuild"

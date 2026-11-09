@@ -13,9 +13,11 @@ import {
   createDepositInstructionsAttestation,
   createPaymentAttempt,
   createPaymentLinkSession,
+  createPublicInvoiceMandateFunding,
   createPublicInvoiceSession,
   getPublicCheckoutSession,
   getPublicInvoice,
+  getPublicInvoiceMandate,
   getPublicInvoicePdf,
   getPublicPaymentLink,
   IntentStreamEvent,
@@ -34,8 +36,13 @@ import {
 } from "@nearpay/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
+import type {
+  Funding as MandateFundingInstructions,
+  Mandate as PublicMandate,
+} from "../../../src/routes/invoice/autopay/model";
 import { SEED, sentinelVectors } from "../../support/fixtures";
 import { type InvoiceFixture, invoice as invoiceFixture } from "../../support/invoices";
+import { funding as fundingFixture } from "../../support/mandates";
 import {
   type Attempt,
   attempt as attemptFixture,
@@ -80,6 +87,8 @@ export interface MockSession {
   feeAmount?: string | null;
   /** `Attestation.asset.token` (spec 0.2.1, signed); undefined = older sentinel. */
   attestToken?: { standard: string; address: string | null } | null;
+  /** Symbol/decimals sentinel attests (default USDC/6). */
+  attestMeta?: { symbol: string; decimals: number };
   streams: Set<ServerResponse>;
 }
 
@@ -105,6 +114,11 @@ export interface MockInvoice {
   paidLagMs: number;
   /** The PDF route fails with this status. */
   pdfStatus: number | null;
+  /** Auto-pay (Stage 4): funding instructions for a request body; error code for the next funding call. */
+  funding: (body: { payer?: string; periods?: number }) => MandateFundingInstructions;
+  fundingError: string | null;
+  /** The subscription's mandate (`getPublicInvoiceMandate`); null → 404. */
+  mandate: PublicMandate | null;
 }
 
 export interface Call {
@@ -128,6 +142,8 @@ const ROUTES: AnyRoute[] = [
   getPublicInvoice,
   createPublicInvoiceSession,
   getPublicInvoicePdf,
+  createPublicInvoiceMandateFunding,
+  getPublicInvoiceMandate,
 ];
 
 const ERRORS: Record<string, [number, string]> = {
@@ -146,6 +162,8 @@ const ERRORS: Record<string, [number, string]> = {
   invoice_not_payable: [409, "state_conflict"],
   destination_not_active: [409, "state_conflict"],
   rate_limited: [429, "rate_limit_error"],
+  auto_debit_unavailable: [422, "invalid_request_error"],
+  vault_cap_exceeded: [422, "invalid_request_error"],
 };
 
 const MIME: Record<string, string> = {
@@ -153,6 +171,13 @@ const MIME: Record<string, string> = {
   ".js": "text/javascript",
   ".css": "text/css",
   ".svg": "image/svg+xml",
+};
+
+/** Deposit addresses per chain (Solana: the solana-transfer.json vector's deposit). */
+export const DEPOSIT_BY_CHAIN: Record<string, string> = {
+  "near:mainnet": "f".repeat(64),
+  "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": "F4d933S5Xkj1LZ7jQZHv2oVxc1YTiWswgBxeQYLcQ71x",
+  "bip122:000000000019d6689c085ae165831e93": "bc1qpct5sxzppv204tth290uen85nqkhzw9sq5m0ku",
 };
 
 let seq = 0;
@@ -313,6 +338,15 @@ export class MockNearPay {
       sessionOpts: {},
       paidLagMs: 0,
       pdfStatus: null,
+      funding: (b) =>
+        fundingFixture({
+          livemode: invoice.livemode,
+          periods: b.periods ?? 3,
+          payer: b.payer ?? null,
+          registered: false,
+        }),
+      fundingError: null,
+      mandate: null,
       ...opts,
     };
     this.invoices.set(id, m);
@@ -459,8 +493,14 @@ export class MockNearPay {
       );
     }
 
-    if (route === getPublicInvoice || route === createPublicInvoiceSession || route === getPublicInvoicePdf) {
-      return this.invoiceRoute(route, req, res, path.split("/")[3] as string);
+    if (
+      route === getPublicInvoice ||
+      route === createPublicInvoiceSession ||
+      route === getPublicInvoicePdf ||
+      route === createPublicInvoiceMandateFunding ||
+      route === getPublicInvoiceMandate
+    ) {
+      return this.invoiceRoute(route, req, res, path.split("/")[3] as string, body);
     }
 
     const id = path.split("/")[4] as string;
@@ -500,12 +540,26 @@ export class MockNearPay {
     return apiError(res, "resource_missing");
   }
 
-  private invoiceRoute(route: AnyRoute, req: IncomingMessage, res: ServerResponse, id: string) {
+  private invoiceRoute(route: AnyRoute, req: IncomingMessage, res: ServerResponse, id: string, body?: unknown) {
     const m = this.invoices.get(id);
     // Unknown id → 404, wrong secret → 401: the page must render both identically (no oracle).
     if (!m) return apiError(res, "resource_missing");
     if (req.headers["x-nearpay-invoice-secret"] !== m.secret) return apiError(res, "invoice_secret_invalid");
     const inv = m.invoice;
+    if (route === createPublicInvoiceMandateFunding) {
+      if (m.fundingError) {
+        const code = m.fundingError;
+        m.fundingError = null;
+        return apiError(res, code);
+      }
+      if (inv.status === "paid" || inv.status === "void") return apiError(res, "invoice_not_payable");
+      const f = m.funding((body ?? {}) as { payer?: string; periods?: number });
+      return send(res, 200, check(createPublicInvoiceMandateFunding.response, f, "mandate funding"));
+    }
+    if (route === getPublicInvoiceMandate) {
+      if (!m.mandate) return apiError(res, "resource_missing");
+      return send(res, 200, check(getPublicInvoiceMandate.response, m.mandate, "mandate"));
+    }
     if (route === getPublicInvoice) {
       const r = safeParseTolerant(PublicInvoice, inv);
       if (!r.success) throw new Error(`mock produced an invalid invoice: ${JSON.stringify(r.error)}`);
@@ -600,7 +654,7 @@ export class MockNearPay {
       a = {
         ...base,
         deposit: {
-          address: chain === "near:mainnet" ? "f".repeat(64) : "0x76b4c56085ed136a8744d52be956396624a730e8",
+          address: DEPOSIT_BY_CHAIN[chain] ?? "0x76b4c56085ed136a8744d52be956396624a730e8",
           memo: s.memo,
           amount_in: option?.estimated_amount_in ?? "2005013",
           min_amount_in: "2000000",
@@ -656,8 +710,8 @@ export class MockNearPay {
                 s.attestAsset === "wrong"
                   ? "nep141:other.near"
                   : (a.deposit?.origin_asset_id ?? a.intents_requirement?.token),
-              symbol: "USDC",
-              decimals: 6,
+              symbol: s.attestMeta?.symbol ?? "USDC",
+              decimals: s.attestMeta?.decimals ?? 6,
               ...(s.attestToken !== undefined ? { token: s.attestToken } : {}),
             },
           }),

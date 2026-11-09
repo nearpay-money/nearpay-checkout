@@ -12,6 +12,7 @@ export default defineConfig({
       walletConnectProjectId: "",
       nearNetwork: "mainnet",
       nearRpcUrl: "https://rpc.test",
+      solanaRpcUrl: "https://solana.rpc.test",
     }),
     __NP_E2E__: "false",
   },

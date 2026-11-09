@@ -1,6 +1,7 @@
 /**
  * "Pay your way" (choose_path) and "Connect a wallet" (connect_wallet): EVM wallets announced through
- * EIP-6963 and NEAR wallets through NEAR Connect (lazy-loaded, §7 budget).
+ * EIP-6963, Solana wallets through the Wallet Standard (Stage 4, §11) and NEAR wallets through NEAR
+ * Connect (the Solana and NEAR modules are lazy-loaded, §7 budget).
  */
 import { Avatar, Button, Callout, LiveRegion } from "@nearpay-internal/ui";
 import { useEffect, useState } from "react";
@@ -14,6 +15,7 @@ import {
   WalletRejected,
 } from "../../wallets/evm/provider";
 import { connectNearWallet, NearUnavailable, nearAvailable } from "../../wallets/near/connector";
+import type { DiscoveredSolanaWallet } from "../../wallets/solana/standard";
 import type { WalletHandle } from "./wallets";
 
 export function StartScreen({
@@ -66,13 +68,22 @@ export function WalletConnect({
   const [evm, setEvm] = useState<DiscoveredWallet[] | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [sol, setSol] = useState<DiscoveredSolanaWallet[] | null>(null);
   const near = nearAvailable();
 
   useEffect(() => {
     let cancelled = false;
+    let stopSol: (() => void) | null = null;
     void discoverInjectedWallets(window).then((list) => !cancelled && setEvm(list));
+    void import("../../wallets/solana/standard")
+      .then((m) => {
+        if (cancelled) return;
+        stopSol = m.discoverSolanaWallets((list) => !cancelled && setSol(list));
+      })
+      .catch(() => !cancelled && setSol([]));
     return () => {
       cancelled = true;
+      stopSol?.();
     };
   }, []);
 
@@ -95,6 +106,20 @@ export function WalletConnect({
     }
   };
 
+  const connectSolana = async (d: DiscoveredSolanaWallet) => {
+    setError(null);
+    setPending(`sol:${d.id}`);
+    try {
+      const m = await import("../../wallets/solana/standard");
+      const wallet = await m.connectSolanaWallet(d);
+      onConnected({ family: "solana", address: wallet.address, label: wallet.label, wallet });
+    } catch (e) {
+      fail(e);
+    } finally {
+      setPending(null);
+    }
+  };
+
   const connectNear = async () => {
     setError(null);
     setPending("near");
@@ -109,7 +134,11 @@ export function WalletConnect({
   };
 
   const pendingName =
-    pending === "near" ? t("wallet.nearTitle") : (evm?.find((w) => w.info.uuid === pending)?.info.name ?? null);
+    pending === "near"
+      ? t("wallet.nearTitle")
+      : (evm?.find((w) => w.info.uuid === pending)?.info.name ??
+        sol?.find((w) => `sol:${w.id}` === pending)?.name ??
+        null);
 
   return (
     <section className="ck-screen" data-testid="wallet-connect" aria-labelledby="ck-wallet-title">
@@ -136,6 +165,21 @@ export function WalletConnect({
             </li>
           ))
         )}
+        {(sol ?? []).map((w) => (
+          <li key={w.id}>
+            <OptionButton
+              avatar={<WalletAvatar icon={w.icon} name={w.name} />}
+              title={t("wallet.walletSuffix", { name: w.name })}
+              description={
+                pending === `sol:${w.id}` ? t("wallet.connecting", { wallet: w.name }) : t("wallet.solanaHint")
+              }
+              pending={pending === `sol:${w.id}`}
+              disabled={pending !== null && pending !== `sol:${w.id}`}
+              onClick={() => void connectSolana(w)}
+              testId={`sol-wallet-${w.id}`}
+            />
+          </li>
+        ))}
         {near ? (
           <li>
             <OptionButton
@@ -150,7 +194,7 @@ export function WalletConnect({
           </li>
         ) : null}
       </ul>
-      {evm !== null && evm.length === 0 ? (
+      {evm !== null && evm.length === 0 && sol !== null && sol.length > 0 ? null : evm !== null && evm.length === 0 ? (
         <p className="np-checkout__note" data-testid="no-evm-wallet">
           {t("wallet.noneFound")}
         </p>

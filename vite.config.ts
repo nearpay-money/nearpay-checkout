@@ -20,6 +20,7 @@ export default defineConfig(({ mode }) => {
         walletConnectProjectId: config.walletConnectProjectId,
         nearNetwork: config.nearNetwork,
         nearRpcUrl: config.nearRpcUrl,
+        solanaRpcUrl: config.solanaRpcUrl,
       }),
       __NP_E2E__: JSON.stringify(config.e2e),
     },

@@ -6,6 +6,7 @@ export interface CheckoutConfig {
   readonly walletConnectProjectId: string;
   readonly nearNetwork: "mainnet" | "testnet";
   readonly nearRpcUrl: string;
+  readonly solanaRpcUrl: string;
   readonly e2e: boolean;
 }
 
