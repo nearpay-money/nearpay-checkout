@@ -1,5 +1,5 @@
 /**
- * Auto-pay fixtures (spec 0.4.0): `MandateFundingInstructions` and `PublicMandate`
+ * Auto-pay fixtures (spec 0.4.1): `MandateFundingInstructions` and `PublicMandate`
  * as billing returns them for the hosted invoice page. The `msg` strings are the spec's
  * `test-vectors/vault.json` `msgs` (the contract's own wire strings).
  */
@@ -72,7 +72,7 @@ export function funding(
     payer,
     storage: { payer_registered: payer ? Boolean(over.registered) : null, deposit: storageDeposit },
     payer_notice:
-      "Sign both transactions from your own NEAR account and pay the gas yourself. Relayer or gasless wallets, NEAR Intents balances, bridges and smart wallets cannot fund a mandate: the vault refunds such deposits. You can cancel at any time from any NEAR wallet and get the remaining balance back.",
+      "Sign both transactions from your own NEAR account and pay the gas yourself. Relayer or gasless wallets, NEAR Intents balances, bridges and smart wallets cannot fund a mandate: the vault refunds such deposits. You can cancel at any time from the NEAR account you pay with; the remaining balance goes back to it.",
     transactions: over.registered ? [ft] : [storage, ft],
     ...rest,
   } as MandateFundingInstructions;

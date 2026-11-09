@@ -52,7 +52,6 @@ import {
   mandateView,
   nearMoney,
   PERIOD_CHOICES,
-  payerNoticeText,
   periodLabel,
   startAtMs,
   type TokenMeta,
@@ -379,7 +378,7 @@ export function AutoPaySetup({
   }
 
   const { funding: f, terms } = st;
-  const meta = tokenMeta(f.token, inv);
+  const meta = tokenMeta(f.token, inv, f.token_asset);
   const choiceAmount = (n: number) => (BigInt(terms.amountPerPeriod) * BigInt(n)).toString();
   const start = startAtMs(terms.startAt);
   const storage = BigInt(f.storage.deposit) > 0n;
@@ -475,7 +474,7 @@ export function AutoPaySetup({
         <li data-testid="autopay-fee">{t(fee.key, fee.vars)}</li>
       </ul>
       <Callout tone="warning" title={t("autopay.noticeTitle")} data-testid="autopay-payer-notice">
-        {payerNoticeText(f.payer_notice, t("autopay.noticeCancel"))}
+        {f.payer_notice}
       </Callout>
       {live ? (
         <>
@@ -627,7 +626,7 @@ export function AutoPayManage({
 
   const m = st.mandate;
   const view = mandateView(m);
-  const meta = tokenMeta(m.token, inv);
+  const meta = tokenMeta(m.token, inv, m.token_asset);
   const cancelTx = exitTransaction(m, "cancel");
   const withdrawTx = exitTransaction(m, "withdraw");
   const live = m.livemode;

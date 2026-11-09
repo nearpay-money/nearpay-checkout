@@ -49,8 +49,6 @@ export const autopayEn = {
   "autopay.factLimit": "The merchant can collect at most this amount {every}, and only when it is due.",
   "autopay.factCancel":
     "Cancel at any time from the NEAR account you pay with (in any wallet app that holds it); the remaining balance goes back to it.",
-  "autopay.noticeCancel":
-    "You can cancel at any time from the NEAR account you pay with; the remaining balance goes back to it.",
   "autopay.factCustody":
     "Your balance sits in the vault smart contract, not with NearPay or the merchant. NearPay can't move it.",
   "autopay.factFees":
