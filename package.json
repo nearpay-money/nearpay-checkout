@@ -23,7 +23,7 @@
   "dependencies": {
     "@hot-labs/near-connect": "0.11.4",
     "@nearpay-internal/ui": "0.3.1",
-    "@nearpay/spec": "0.4.0",
+    "@nearpay/spec": "0.4.1",
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
     "@wallet-standard/app": "1.1.1",
@@ -48,7 +48,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@nearpay/spec": "0.4.0"
+      "@nearpay/spec": "0.4.1"
     },
     "onlyBuiltDependencies": [
       "esbuild"

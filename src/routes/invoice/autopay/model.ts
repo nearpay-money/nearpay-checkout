@@ -41,7 +41,7 @@ const TGAS = 1_000_000_000_000n;
 const MIN_EXIT_GAS = 50n * TGAS;
 const FT_TRANSFER_CALL_GAS = 100n * TGAS;
 
-// ---- token display (spec gap: MandateFundingInstructions/PublicMandate carry no symbol/decimals) -----
+// ---- token display (`token_asset`, spec 0.4.1; the v1 table is the fallback when billing omits it) ---
 
 export interface TokenMeta {
   readonly symbol: string;
@@ -50,14 +50,20 @@ export interface TokenMeta {
 
 /**
  * The v1 vault tokens (billing §14 d2: USD at par in USDC or USDT; sandbox stand-in allows the same
- * accounts). Other tokens use the invoice's pricing asset when it is the same token, else raw base units.
+ * accounts) — the fallback when the response carries no `token_asset`. Other tokens use the invoice's
+ * pricing asset when it is the same token, else raw base units.
  */
 const VAULT_TOKENS: Readonly<Record<string, TokenMeta>> = {
   "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1": { symbol: "USDC", decimals: 6 },
   "usdt.tether-token.near": { symbol: "USDT", decimals: 6 },
 };
 
-export function tokenMeta(token: string, inv: Pick<Invoice, "pricing_asset" | "asset_id"> | null): TokenMeta | null {
+export function tokenMeta(
+  token: string,
+  inv: Pick<Invoice, "pricing_asset" | "asset_id"> | null,
+  asset?: Funding["token_asset"] | Mandate["token_asset"] | null,
+): TokenMeta | null {
+  if (asset) return { symbol: asset.symbol, decimals: asset.decimals };
   const known = VAULT_TOKENS[token];
   if (known) return known;
   const p = inv?.pricing_asset;
@@ -247,17 +253,6 @@ export function feeFact(bps: number | null | undefined): { key: MessageKey; vars
   if (pct === null) return { key: "autopay.factFeesNoRate", vars: {} };
   if (pct === "0") return { key: "autopay.factFeesNone", vars: {} };
   return { key: "autopay.factFees", vars: { fee: pct } };
-}
-
-/**
- * The sentence of billing's default `payer_notice` (spec 0.4.0 `MANDATE_FUNDING_PAYER_NOTICE`) that
- * overstates who can cancel: the vault accepts cancel/withdraw only from the paying account (spec CR).
- */
-const NOTICE_ANY_WALLET = "You can cancel at any time from any NEAR wallet and get the remaining balance back.";
-
-/** `payer_notice` as shown: verbatim, except the inaccurate cancel sentence, which is corrected. */
-export function payerNoticeText(notice: string, corrected: string): string {
-  return notice.includes(NOTICE_ANY_WALLET) ? notice.replace(NOTICE_ANY_WALLET, corrected) : notice;
 }
 
 /** `start_at` (ns string) → epoch ms; null = now. */

@@ -10,7 +10,6 @@ import {
   feeFact,
   feePercent,
   mandateView,
-  payerNoticeText,
   periodLabel,
   startAtMs,
   tokenMeta,
@@ -20,7 +19,7 @@ import { funding, MSG_START_NOW, mandate, USDC, VAULT, withdrawTx } from "../sup
 
 const wAction = withdrawTx.actions[0] as (typeof withdrawTx.actions)[number];
 
-describe("fixtures follow the 0.4.0 schemas", () => {
+describe("fixtures follow the 0.4.1 schemas", () => {
   it("funding and mandate parse; msg is a vault create_mandate", () => {
     expect(MandateFundingInstructions.safeParse(funding()).success).toBe(true);
     expect(MandateFundingInstructions.safeParse(funding({ payer: "payer.near", registered: true })).success).toBe(true);
@@ -222,6 +221,17 @@ describe("mandate view and payer transactions", () => {
     expect(
       tokenMeta("x.near", { asset_id: "nep141:x.near", pricing_asset: { symbol: "X", decimals: 18 } as never }),
     ).toEqual({ symbol: "X", decimals: 18 });
+    // token_asset (spec 0.4.1) wins over the table and the pricing asset; absent/null → the fallbacks
+    const xAsset = { asset_id: "nep141:x.near", symbol: "XT", decimals: 8 };
+    expect(tokenMeta("x.near", null, xAsset)).toEqual({ symbol: "XT", decimals: 8 });
+    expect(tokenMeta(USDC, null, { asset_id: `nep141:${USDC}`, symbol: "USDC.e", decimals: 6 })).toEqual({
+      symbol: "USDC.e",
+      decimals: 6,
+    });
+    expect(tokenMeta(USDC, null, null)).toEqual({ symbol: "USDC", decimals: 6 });
+    expect(tokenMeta(USDC, null, undefined)).toEqual({ symbol: "USDC", decimals: 6 });
+    expect(MandateFundingInstructions.safeParse(funding({ token_asset: xAsset })).success).toBe(true);
+    expect(PublicMandate.safeParse(mandate({ token_asset: xAsset })).success).toBe(true);
   });
 });
 
@@ -249,15 +259,5 @@ describe("copy derived from the prepared terms", () => {
     // The fee shown is the one in the checked vault msg.
     const r = checkFunding(funding(), null);
     expect(r.ok && feeFact(r.terms.feeBps).vars.fee).toBe("1");
-  });
-
-  it("corrects billing's default cancel sentence: only the paying account can cancel", () => {
-    const fixed =
-      "You can cancel at any time from the NEAR account you pay with; the remaining balance goes back to it.";
-    const shown = payerNoticeText(MANDATE_FUNDING_PAYER_NOTICE, fixed);
-    expect(shown).not.toContain("any NEAR wallet");
-    expect(shown).toContain(fixed);
-    expect(shown).toContain("Sign both transactions from your own NEAR account");
-    expect(payerNoticeText("Sign from your own account.", fixed)).toBe("Sign from your own account.");
   });
 });
