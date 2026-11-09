@@ -82,7 +82,7 @@ spec's test-vector key (pinned only in the e2e build).
 
 ## Status
 
-Step 4.3 (Phase A, spec 0.4.0 types isolated in `src/lib/spec-gap-0.4.0.ts` until 0.4.0 is published):
+Step 4.3 (spec 0.4.0):
 Solana wallets through the Wallet Standard (SOL `System.Transfer`, SPL `CreateIdempotent` +
 `TransferChecked` from the verified attestation only, byte-for-byte against `solana-transfer.json`;
 memo / Token-2022 / unreconciled mint → manual path), Solana Pay and BIP-21 QR on the manual path, and

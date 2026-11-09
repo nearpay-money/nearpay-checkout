@@ -9,6 +9,7 @@ import {
   getPublicCheckoutSession,
   INTENTS_CONTRACT,
   listPaymentOptions,
+  SOLANA_MAINNET,
   signalDepositSent,
   simulateDeposit,
   submitDepositTx,
@@ -23,7 +24,6 @@ import { call, isApiError } from "../lib/api/client";
 import { NEAR_MAINNET, walletAsset } from "../lib/chains/chains";
 import { type VerifiedInstructions, verifyAttestation } from "../lib/integrity/verify";
 import { type AssetMeta, assetMeta, paidAssetId, totalToSend, walletTokenHint } from "../lib/money/display";
-import { SOLANA_MAINNET } from "../lib/spec-gap-0.4.0/chains";
 import { ensureChain, personalSign, sendTransaction, WalletRejected } from "../wallets/evm/provider";
 import { evmPaymentTx } from "../wallets/evm/tx";
 import {

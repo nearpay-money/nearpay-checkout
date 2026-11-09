@@ -5,6 +5,8 @@
  * broadcast — §5.8), approve in your wallet, not approved, not enough funds. Every amount shown is the
  * ATTESTED one.
  */
+
+import { formatBaseUnits } from "@nearpay/spec";
 import {
   Button,
   Callout,
@@ -24,7 +26,6 @@ import type { Checkout } from "../../app/useCheckout";
 import { chainName, getChain } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { assetMoney } from "../../lib/money/display";
-import { formatBaseUnits } from "../../lib/spec-gap-0.4.0/chains";
 import { ScreenTitle, StateScreen } from "../../ui/blocks";
 import { shortAddress } from "../wallet-connect/wallets";
 

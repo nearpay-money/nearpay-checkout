@@ -4,14 +4,8 @@
  * requests and BIP-21 URIs (Stage 4), the plain address otherwise. Built only from attested instructions.
  */
 import type { Attestation } from "@nearpay/spec";
+import { BITCOIN_MAINNET, bip21Uri, parseOmftAssetId, SOLANA_MAINNET, solanaPayUri } from "@nearpay/spec";
 import type { WalletAsset } from "../../lib/chains/chains";
-import {
-  BITCOIN_MAINNET,
-  bip21Uri,
-  parseOmftAssetId,
-  SOLANA_MAINNET,
-  solanaPayUri,
-} from "../../lib/spec-gap-0.4.0/chains";
 import { isSolanaAddress, SOL_ASSET_ID, splAssetToken } from "../../wallets/solana/tx";
 
 export const BTC_ASSET_ID = "nep141:btc.omft.near";

@@ -1,7 +1,8 @@
 /** Which payment options a path can use (lld/checkout-and-js.md §3 `asset-picker`), search and network filter. */
+
+import { parseOmftAssetId, SOLANA_MAINNET } from "@nearpay/spec";
 import type { Option, Path } from "../../app/machine";
 import { chainName, walletAsset } from "../../lib/chains/chains";
-import { parseOmftAssetId, SOLANA_MAINNET } from "../../lib/spec-gap-0.4.0/chains";
 
 /** Wallet recipe of an option: derived from the attested asset id, else its typed token (CR-15-06). */
 export const optionWalletAsset = (o: Option) => walletAsset(o.origin_asset_id, o.chain, o.token);

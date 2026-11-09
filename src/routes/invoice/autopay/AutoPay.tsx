@@ -13,6 +13,8 @@
  *   signed by the mandate's payer account only.
  * - Test mode never broadcasts (INV-8, §5.8): terms are shown, signing is replaced by a note.
  */
+
+import { createPublicInvoiceMandateFunding, getPublicInvoice, getPublicInvoiceMandate } from "@nearpay/spec";
 import {
   Button,
   Callout,
@@ -33,11 +35,6 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { call, isApiError } from "../../../lib/api/client";
 import { autopayEn } from "../../../lib/i18n/messages.autopay.en";
 import { errorText, registerMessages, t } from "../../../lib/i18n/t";
-import {
-  createPublicInvoiceMandateFunding,
-  getPublicInvoice,
-  getPublicInvoiceMandate,
-} from "../../../lib/spec-gap-0.4.0/billing";
 import { ScreenTitle, StateScreen } from "../../../ui/blocks";
 import { connectNearWallet, type NearWallet, nearAvailable } from "../../../wallets/near/connector";
 import { depositTxHash } from "../../../wallets/near/tx";

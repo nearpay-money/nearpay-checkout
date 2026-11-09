@@ -13,9 +13,11 @@ import {
   createDepositInstructionsAttestation,
   createPaymentAttempt,
   createPaymentLinkSession,
+  createPublicInvoiceMandateFunding,
   createPublicInvoiceSession,
   getPublicCheckoutSession,
   getPublicInvoice,
+  getPublicInvoiceMandate,
   getPublicInvoicePdf,
   getPublicPaymentLink,
   IntentStreamEvent,
@@ -34,13 +36,10 @@ import {
 } from "@nearpay/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
-import {
-  createPublicInvoiceMandateFunding,
-  getPublicInvoiceMandate,
-  type MandateFundingInstructions,
-  PublicInvoice as PublicInvoice040,
-  type PublicMandate,
-} from "../../../src/lib/spec-gap-0.4.0/billing";
+import type {
+  Funding as MandateFundingInstructions,
+  Mandate as PublicMandate,
+} from "../../../src/routes/invoice/autopay/model";
 import { SEED, sentinelVectors } from "../../support/fixtures";
 import { type InvoiceFixture, invoice as invoiceFixture } from "../../support/invoices";
 import { funding as fundingFixture } from "../../support/mandates";
@@ -143,8 +142,8 @@ const ROUTES: AnyRoute[] = [
   getPublicInvoice,
   createPublicInvoiceSession,
   getPublicInvoicePdf,
-  createPublicInvoiceMandateFunding as unknown as AnyRoute,
-  getPublicInvoiceMandate as unknown as AnyRoute,
+  createPublicInvoiceMandateFunding,
+  getPublicInvoiceMandate,
 ];
 
 const ERRORS: Record<string, [number, string]> = {
@@ -498,8 +497,8 @@ export class MockNearPay {
       route === getPublicInvoice ||
       route === createPublicInvoiceSession ||
       route === getPublicInvoicePdf ||
-      route === (createPublicInvoiceMandateFunding as unknown as AnyRoute) ||
-      route === (getPublicInvoiceMandate as unknown as AnyRoute)
+      route === createPublicInvoiceMandateFunding ||
+      route === getPublicInvoiceMandate
     ) {
       return this.invoiceRoute(route, req, res, path.split("/")[3] as string, body);
     }
@@ -547,7 +546,7 @@ export class MockNearPay {
     if (!m) return apiError(res, "resource_missing");
     if (req.headers["x-nearpay-invoice-secret"] !== m.secret) return apiError(res, "invoice_secret_invalid");
     const inv = m.invoice;
-    if (route === (createPublicInvoiceMandateFunding as unknown as AnyRoute)) {
+    if (route === createPublicInvoiceMandateFunding) {
       if (m.fundingError) {
         const code = m.fundingError;
         m.fundingError = null;
@@ -557,13 +556,11 @@ export class MockNearPay {
       const f = m.funding((body ?? {}) as { payer?: string; periods?: number });
       return send(res, 200, check(createPublicInvoiceMandateFunding.response, f, "mandate funding"));
     }
-    if (route === (getPublicInvoiceMandate as unknown as AnyRoute)) {
+    if (route === getPublicInvoiceMandate) {
       if (!m.mandate) return apiError(res, "resource_missing");
       return send(res, 200, check(getPublicInvoiceMandate.response, m.mandate, "mandate"));
     }
     if (route === getPublicInvoice) {
-      const r0 = safeParseTolerant(PublicInvoice040, inv);
-      if (!r0.success) throw new Error(`mock produced an invalid 0.4.0 invoice: ${JSON.stringify(r0.error)}`);
       const r = safeParseTolerant(PublicInvoice, inv);
       if (!r.success) throw new Error(`mock produced an invalid invoice: ${JSON.stringify(r.error)}`);
       return send(res, 200, inv);

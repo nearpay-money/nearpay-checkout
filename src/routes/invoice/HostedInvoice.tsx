@@ -14,7 +14,12 @@
  * - The invoice's `merchant_name_unverified` is never rendered (L-CK-03): the attested merchant appears
  *   once a payment attempt is verified, as in every checkout.
  */
-import { createPublicInvoiceSession, getPublicInvoicePdf, type InvoicePaymentSession } from "@nearpay/spec";
+import {
+  createPublicInvoiceSession,
+  getPublicInvoice,
+  getPublicInvoicePdf,
+  type InvoicePaymentSession,
+} from "@nearpay/spec";
 import {
   Button,
   Callout,
@@ -36,7 +41,6 @@ import { useCheckout } from "../../app/useCheckout";
 import { webLinks } from "../../config";
 import { call, callBinary, isApiError } from "../../lib/api/client";
 import { errorText, t } from "../../lib/i18n/t";
-import { getPublicInvoice } from "../../lib/spec-gap-0.4.0/billing";
 import { StateScreen } from "../../ui/blocks";
 import { useMediaQuery } from "../../ui/useMediaQuery";
 import { AutoPayEntry, AutoPayManage, AutoPaySetup } from "./autopay/AutoPay";

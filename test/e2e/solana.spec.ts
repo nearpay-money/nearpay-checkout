@@ -3,10 +3,11 @@
  * recipe from the verified attestation (memo null, classic Token program), the manual path's Solana Pay /
  * BIP-21 QR, and the unchanged rules (sentinel before any prompt, test mode never broadcasts).
  */
+
+import { SOLANA_MAINNET } from "@nearpay/spec";
+import v from "@nearpay/spec/test-vectors/solana-transfer.json" with { type: "json" };
 import bs58 from "bs58";
-import { SOLANA_MAINNET } from "../../src/lib/spec-gap-0.4.0/chains";
 import { solanaPaymentTransaction } from "../../src/wallets/solana/tx";
-import v from "../fixtures/spec-0.4.0/solana-transfer.json" with { type: "json" };
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay } from "./support/mock-server";
 import { injectSolanaWallet, SOL_PAYER, stubSolanaRpc } from "./support/wallets";

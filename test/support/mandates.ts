@@ -1,9 +1,12 @@
 /**
- * Auto-pay fixtures (spec 0.4.0 placeholder types): `MandateFundingInstructions` and `PublicMandate`
+ * Auto-pay fixtures (spec 0.4.0): `MandateFundingInstructions` and `PublicMandate`
  * as billing returns them for the hosted invoice page. The `msg` strings are the spec's
  * `test-vectors/vault.json` `msgs` (the contract's own wire strings).
  */
-import type { MandateFundingInstructions, PublicMandate } from "../../src/lib/spec-gap-0.4.0/billing";
+import type {
+  Funding as MandateFundingInstructions,
+  Mandate as PublicMandate,
+} from "../../src/routes/invoice/autopay/model";
 
 export const USDC = "17208628f84f5d6ad33f0da3bbbeb27ffcb398eac501a31bd6ad2011e36133a1";
 export const VAULT = "vault.sandbox.near";

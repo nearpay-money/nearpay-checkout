@@ -3,9 +3,10 @@
  * auto-pay (§4.4). Runs only with NP_SHOTS=<dir>
  * (`NP_SHOTS=/home/claude/shots/checkout-4.3 pnpm exec playwright test screens-4.3`).
  */
+
+import { SOLANA_MAINNET } from "@nearpay/spec";
+import v from "@nearpay/spec/test-vectors/solana-transfer.json" with { type: "json" };
 import type { Page } from "@playwright/test";
-import { SOLANA_MAINNET } from "../../src/lib/spec-gap-0.4.0/chains";
-import v from "../fixtures/spec-0.4.0/solana-transfer.json" with { type: "json" };
 import { mandate, withdrawTx } from "../support/mandates";
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay } from "./support/mock-server";

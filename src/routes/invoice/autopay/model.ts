@@ -11,9 +11,7 @@
  * Terms are displayed from the parsed `msg` (what the vault will store), not from free-text fields.
  * Money stays base-unit strings (INV-5).
  */
-import type { MoneyFormatOptions } from "@nearpay-internal/ui";
-import type { z } from "zod";
-import type { MessageKey } from "../../../lib/i18n/messages.en";
+
 import {
   type MandateFundingInstructions,
   type NearTransactionRequest,
@@ -21,12 +19,15 @@ import {
   type PublicMandate,
   VAULT_PERIOD_SECS_PER_INTERVAL,
   VaultMsg,
-} from "../../../lib/spec-gap-0.4.0/billing";
+} from "@nearpay/spec";
+import type { MoneyFormatOptions } from "@nearpay-internal/ui";
+import type { z } from "zod";
+import type { MessageKey } from "../../../lib/i18n/messages.en";
 import type { FunctionCallAction, NearTransaction } from "../../../wallets/near/tx";
 import type { Invoice } from "../model";
 
-export type Funding = MandateFundingInstructions;
-export type Mandate = PublicMandate;
+export type Funding = z.output<typeof MandateFundingInstructions>;
+export type Mandate = z.output<typeof PublicMandate>;
 type CreateArgs = Extract<z.output<typeof VaultMsg>, { create_mandate: unknown }>["create_mandate"];
 
 /** Periods a payer can fund up front (billing accepts 1–36, default 3). */

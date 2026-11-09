@@ -6,12 +6,13 @@
  * The invoice's `display.merchant_name_unverified` is never read here (L-CK-03): who is paid is shown
  * only from the sentinel attestation once a payment attempt is verified, exactly as in checkout.
  */
+
+import type { PublicInvoice } from "@nearpay/spec";
 import { InvoiceSecret } from "@nearpay/spec";
 import type { MoneyFormatOptions, Tone } from "@nearpay-internal/ui";
 import type { z } from "zod";
 import type { MessageKey } from "../../lib/i18n/messages.en";
 import { priceMoney, pricingAssetMeta } from "../../lib/money/display";
-import type { PublicInvoice } from "../../lib/spec-gap-0.4.0/billing";
 
 export type Invoice = z.output<typeof PublicInvoice>;
 type Amount = Invoice["total"];

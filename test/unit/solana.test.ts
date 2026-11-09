@@ -3,13 +3,7 @@
  * byte (program ids, account metas, data), ATA derivation, the SPL asset id rule, the recipe's fail-closed
  * rules, the legacy message encoding, and the Solana Pay / BIP-21 manual-path QR.
  */
-import bs58 from "bs58";
-import { describe, expect, it } from "vitest";
-import { contentSecurityPolicy, resolveConfig } from "../../build/config";
-import { initialState, type Option, type State } from "../../src/app/machine";
-import { PHASE_SCREENS, screenFor, TX_FAILED } from "../../src/app/screens";
-import { isSolanaWalletOption, payableOptions } from "../../src/features/asset-picker/options";
-import { BTC_ASSET_ID, paymentUri } from "../../src/features/deposit-instructions/qr";
+
 import {
   BITCOIN_MAINNET,
   bip21Uri,
@@ -17,7 +11,16 @@ import {
   parseOmftAssetId,
   SOLANA_MAINNET,
   solanaPayUri,
-} from "../../src/lib/spec-gap-0.4.0/chains";
+} from "@nearpay/spec";
+import chains from "@nearpay/spec/test-vectors/chains-solana-bitcoin.json";
+import v from "@nearpay/spec/test-vectors/solana-transfer.json";
+import bs58 from "bs58";
+import { describe, expect, it } from "vitest";
+import { contentSecurityPolicy, resolveConfig } from "../../build/config";
+import { initialState, type Option, type State } from "../../src/app/machine";
+import { PHASE_SCREENS, screenFor, TX_FAILED } from "../../src/app/screens";
+import { isSolanaWalletOption, payableOptions } from "../../src/features/asset-picker/options";
+import { BTC_ASSET_ID, paymentUri } from "../../src/features/deposit-instructions/qr";
 import {
   associatedTokenAddress,
   compileLegacyMessage,
@@ -32,8 +35,6 @@ import {
   transferChecked,
   unsignedTransaction,
 } from "../../src/wallets/solana/tx";
-import chains from "../fixtures/spec-0.4.0/chains-solana-bitcoin.json";
-import v from "../fixtures/spec-0.4.0/solana-transfer.json";
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const asVector = (ixs: Instruction[]) =>
