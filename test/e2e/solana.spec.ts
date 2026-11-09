@@ -4,9 +4,9 @@
  * BIP-21 QR, and the unchanged rules (sentinel before any prompt, test mode never broadcasts).
  */
 import bs58 from "bs58";
-import { SOLANA_MAINNET } from "../../src/lib/spec-gap-0.4.0";
+import { SOLANA_MAINNET } from "../../src/lib/spec-gap-0.4.0/chains";
 import { solanaPaymentTransaction } from "../../src/wallets/solana/tx";
-import v from "../fixtures/spec-0.4.0/solana-transfer.json";
+import v from "../fixtures/spec-0.4.0/solana-transfer.json" with { type: "json" };
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay } from "./support/mock-server";
 import { injectSolanaWallet, SOL_PAYER, stubSolanaRpc } from "./support/wallets";
@@ -96,7 +96,11 @@ test("SOL (live): one System.Transfer, no token checks", async ({ page, mock }) 
   const tx = (await solCalls(page))[1]?.tx;
   expect(tx).toEqual(
     Array.from(
-      solanaPaymentTransaction({ kind: "sol", deposit: v.inputs.deposit_address, lamports: v.sol.amount_in }, SOL_PAYER, BLOCKHASH),
+      solanaPaymentTransaction(
+        { kind: "sol", deposit: v.inputs.deposit_address, lamports: v.sol.amount_in },
+        SOL_PAYER,
+        BLOCKHASH,
+      ),
     ),
   );
   expect(rpc).toEqual(["getLatestBlockhash"]);
@@ -207,8 +211,9 @@ test("manual path: Solana Pay QR for SPL (with the reconciled mint) and BIP-21 f
   await page.getByTestId("path-manual").click();
   await page.getByTestId(`option-route_quote-${SPL}`).click();
   await page.getByTestId("refund-address").fill("0xnot-solana");
-  await page.getByTestId("continue").click();
+  await page.getByTestId("refund-address").blur();
   await expect(page.getByTestId("refund-error")).toBeVisible();
+  await expect(page.getByTestId("continue")).toBeDisabled();
   await page.getByTestId("refund-address").fill(SOL_PAYER);
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("qr")).toHaveCount(0);

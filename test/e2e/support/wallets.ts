@@ -174,7 +174,10 @@ export async function stubSolanaRpc(page: Page, opts: { token2022?: boolean; dow
     if (opts.down) return route.fulfill({ status: 503, body: "down" });
     const result =
       body.method === "getLatestBlockhash"
-        ? { context: { slot: 1 }, value: { blockhash: "AX2DPY1mMojpmUNuoYycmtqmkRQ9hX8sgYKKiWUvCHZv", lastValidBlockHeight: 10 } }
+        ? {
+            context: { slot: 1 },
+            value: { blockhash: "AX2DPY1mMojpmUNuoYycmtqmkRQ9hX8sgYKKiWUvCHZv", lastValidBlockHeight: 10 },
+          }
         : body.method === "getMinimumBalanceForRentExemption"
           ? 2039280
           : body.method === "getAccountInfo"
@@ -193,7 +196,11 @@ export async function stubSolanaRpc(page: Page, opts: { token2022?: boolean; dow
                     : null,
               }
             : null;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ jsonrpc: "2.0", id: 1, result }) });
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, result }),
+    });
   });
   return methods;
 }

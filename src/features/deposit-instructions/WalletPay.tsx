@@ -24,7 +24,7 @@ import type { Checkout } from "../../app/useCheckout";
 import { chainName, getChain } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { assetMoney } from "../../lib/money/display";
-import { formatBaseUnits } from "../../lib/spec-gap-0.4.0";
+import { formatBaseUnits } from "../../lib/spec-gap-0.4.0/chains";
 import { ScreenTitle, StateScreen } from "../../ui/blocks";
 import { shortAddress } from "../wallet-connect/wallets";
 

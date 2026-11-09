@@ -17,7 +17,7 @@ import {
   parseOmftAssetId,
   SOLANA_MAINNET,
   solanaPayUri,
-} from "../../src/lib/spec-gap-0.4.0";
+} from "../../src/lib/spec-gap-0.4.0/chains";
 import {
   associatedTokenAddress,
   compileLegacyMessage,
@@ -317,5 +317,21 @@ describe("Solana in the option list, screens and build config", () => {
         "production",
       ),
     ).toThrow(/https/);
+  });
+});
+
+describe("recipe freshness before signing", () => {
+  it("sameRecipe compares every field and kind", async () => {
+    const { sameRecipe } = await import("../../src/app/useCheckout");
+    const spl = { kind: "spl", deposit: "D", mint: "M", decimals: 6, amount: "1" } as const;
+    const sol = { kind: "sol", deposit: "D", lamports: "1" } as const;
+    expect(sameRecipe(spl, { ...spl })).toBe(true);
+    expect(sameRecipe(spl, { ...spl, amount: "2" })).toBe(false);
+    expect(sameRecipe(spl, { ...spl, mint: "N" })).toBe(false);
+    expect(sameRecipe(spl, { ...spl, decimals: 9 })).toBe(false);
+    expect(sameRecipe(spl, { ...spl, deposit: "E" })).toBe(false);
+    expect(sameRecipe(sol, { ...sol })).toBe(true);
+    expect(sameRecipe(sol, { ...sol, lamports: "2" })).toBe(false);
+    expect(sameRecipe(sol, spl)).toBe(false);
   });
 });

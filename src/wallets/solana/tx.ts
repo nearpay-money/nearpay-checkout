@@ -16,7 +16,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import bs58 from "bs58";
-import { parseOmftAssetId, SOLANA_MAINNET } from "../../lib/spec-gap-0.4.0";
+import { parseOmftAssetId, SOLANA_MAINNET } from "../../lib/spec-gap-0.4.0/chains";
 
 export const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 export const TOKEN_PROGRAM = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";

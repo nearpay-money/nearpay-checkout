@@ -23,7 +23,7 @@ import { call, isApiError } from "../lib/api/client";
 import { NEAR_MAINNET, walletAsset } from "../lib/chains/chains";
 import { type VerifiedInstructions, verifyAttestation } from "../lib/integrity/verify";
 import { type AssetMeta, assetMeta, paidAssetId, totalToSend, walletTokenHint } from "../lib/money/display";
-import { SOLANA_MAINNET } from "../lib/spec-gap-0.4.0";
+import { SOLANA_MAINNET } from "../lib/spec-gap-0.4.0/chains";
 import { ensureChain, personalSign, sendTransaction, WalletRejected } from "../wallets/evm/provider";
 import { evmPaymentTx } from "../wallets/evm/tx";
 import {
@@ -117,6 +117,14 @@ export type SolanaPrep =
   | { readonly state: "ready"; readonly recipe: SolanaRecipe; readonly rentLamports: string | null }
   | { readonly state: "manual"; readonly reason: SolanaManualReason }
   | { readonly state: "error" };
+
+/** Field equality of two Solana recipes (kind, deposit, amount, mint, decimals). */
+export function sameRecipe(a: SolanaRecipe, b: SolanaRecipe): boolean {
+  if (a.kind === "sol" || b.kind === "sol") {
+    return a.kind === "sol" && b.kind === "sol" && a.deposit === b.deposit && a.lamports === b.lamports;
+  }
+  return a.deposit === b.deposit && a.mint === b.mint && a.amount === b.amount && a.decimals === b.decimals;
+}
 
 function errorCode(e: unknown): string {
   if (e instanceof WalletRejected) return "wallet_rejected";
@@ -416,7 +424,11 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       const att = v.attestation;
       if (w.family === "solana") {
         // §11: only the recipe derived from the verified attestation (and checked over RPC) is sent.
-        if (solana?.state !== "ready") throw new Error("This payment can't be sent from a Solana wallet.");
+        // The RPC-checked recipe must be the one of THIS verified attestation (a re-quote re-runs the checks).
+        const fresh = solanaRecipe(att);
+        if (solana?.state !== "ready" || !fresh?.ok || !sameRecipe(fresh.recipe, solana.recipe)) {
+          throw new Error("This payment can't be sent from a Solana wallet.");
+        }
         const blockhash = await latestBlockhash(config.solanaRpcUrl);
         const tx = solanaPaymentTransaction(solana.recipe, w.address, blockhash);
         const signature = await w.wallet.signAndSendTransaction(tx);
