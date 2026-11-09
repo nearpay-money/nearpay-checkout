@@ -1,7 +1,9 @@
-/** `PublicInvoice` fixtures (spec 0.3.0) shared by unit tests and the Playwright mock. */
-import { PublicInvoice, safeParseTolerant } from "@nearpay/spec";
+/** `PublicInvoice` fixtures (spec 0.3.0; 0.4.0 `auto_debit`) shared by unit tests and the Playwright mock. */
+import { safeParseTolerant } from "@nearpay/spec";
 import type { z } from "zod";
+import { PublicInvoice } from "../../src/lib/spec-gap-0.4.0/billing";
 
+/** spec 0.4.0 `PublicInvoice` (0.3.1 + `auto_debit`, placeholder until 0.4.0 is published). */
 export type InvoiceFixture = z.output<typeof PublicInvoice>;
 
 export const INVOICE_ID = "in_01jbz9k3m4n5p6q7r8s9t0v1w2";

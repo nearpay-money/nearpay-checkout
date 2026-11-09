@@ -387,6 +387,9 @@ export const en = {
   "error.destination_not_active": "This merchant can't receive payments right now. Try again later.",
   "error.currency_unsupported": "This currency isn't supported for payments right now.",
   "error.invoice_not_payable": "This invoice can't be paid any more. The page has been updated.",
+  "error.auto_debit_unavailable": "Auto-pay isn't available for this subscription.",
+  "error.vault_cap_exceeded": "That amount is above the auto-pay limit. Choose fewer periods.",
+  "error.destination_not_intents_account": "This merchant can't accept auto-pay yet.",
   "error.invalid_response": "The server sent a response this page does not understand. Try again.",
   "error.wallet_failed": "Your wallet reported an error: {message}",
 
@@ -406,4 +409,5 @@ export const en = {
   "verifyReason.network_error": "the verification service could not be reached",
 } as const;
 
-export type MessageKey = keyof typeof en;
+/** Keys of the main catalog and of the lazily registered ones (`registerMessages`). */
+export type MessageKey = keyof typeof en | keyof typeof import("./messages.autopay.en").autopayEn;

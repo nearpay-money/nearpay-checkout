@@ -14,12 +14,7 @@
  * - The invoice's `merchant_name_unverified` is never rendered (L-CK-03): the attested merchant appears
  *   once a payment attempt is verified, as in every checkout.
  */
-import {
-  createPublicInvoiceSession,
-  getPublicInvoice,
-  getPublicInvoicePdf,
-  type InvoicePaymentSession,
-} from "@nearpay/spec";
+import { createPublicInvoiceSession, getPublicInvoicePdf, type InvoicePaymentSession } from "@nearpay/spec";
 import {
   Button,
   Callout,
@@ -41,8 +36,10 @@ import { useCheckout } from "../../app/useCheckout";
 import { webLinks } from "../../config";
 import { call, callBinary, isApiError } from "../../lib/api/client";
 import { errorText, t } from "../../lib/i18n/t";
+import { getPublicInvoice } from "../../lib/spec-gap-0.4.0/billing";
 import { StateScreen } from "../../ui/blocks";
 import { useMediaQuery } from "../../ui/useMediaQuery";
+import { AutoPayEntry, AutoPayManage, AutoPaySetup } from "./autopay/AutoPay";
 import {
   billToText,
   formatDate,
@@ -71,7 +68,9 @@ type PageState =
   | { readonly kind: "not_found" }
   | { readonly kind: "load_failed"; readonly code: string }
   | { readonly kind: "ready"; readonly invoice: Invoice }
-  | { readonly kind: "paying"; readonly invoice: Invoice; readonly session: Session };
+  | { readonly kind: "paying"; readonly invoice: Invoice; readonly session: Session }
+  /** Auto-pay setup or management (Stage 4, §4.4), in place like the payment flow. */
+  | { readonly kind: "autopay"; readonly invoice: Invoice; readonly view: "setup" | "manage" };
 
 const NOT_FOUND = new Set(["invoice_secret_invalid", "resource_missing"]);
 
@@ -90,7 +89,7 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
       if (!quiet) setSt({ kind: "loading" });
       try {
         const invoice = await call(getPublicInvoice, { params: { id }, invoiceSecret: secret });
-        setSt((cur) => (cur.kind === "paying" ? cur : { kind: "ready", invoice }));
+        setSt((cur) => (cur.kind === "paying" || cur.kind === "autopay" ? cur : { kind: "ready", invoice }));
         return invoice;
       } catch (e) {
         if (isNotFound(e)) setSt({ kind: "not_found" });
@@ -104,7 +103,7 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
     void load();
   }, [load]);
 
-  const invoice = st.kind === "ready" || st.kind === "paying" ? st.invoice : null;
+  const invoice = st.kind === "ready" || st.kind === "paying" || st.kind === "autopay" ? st.invoice : null;
   useEffect(() => {
     document.title = invoice ? t("invoice.pageTitle", { number: invoice.number }) : t("app.title");
   }, [invoice]);
@@ -151,9 +150,20 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
   const back = (paid: JustPaid | null = null) => {
     if (paid) setJustPaid(paid);
     setError(null);
-    setSt((cur) => (cur.kind === "paying" ? { kind: "ready", invoice: cur.invoice } : cur));
+    setSt((cur) => (cur.kind === "paying" || cur.kind === "autopay" ? { kind: "ready", invoice: cur.invoice } : cur));
     void load(true);
   };
+  const toAutoPay = useCallback(
+    (view: "setup" | "manage") =>
+      setSt((cur) =>
+        cur.kind === "ready" || cur.kind === "autopay" ? { kind: "autopay", invoice: cur.invoice, view } : cur,
+      ),
+    [],
+  );
+  const autoPayActive = useCallback(() => {
+    toAutoPay("manage");
+    void load(true);
+  }, [toAutoPay, load]);
 
   /** "Start a new payment" after an expired session: re-read the invoice, then open a fresh session. */
   const restart = async (from: Invoice) => {
@@ -175,6 +185,18 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
         onViewInvoice={(p) => back(p)}
         onRestart={() => void restart(st.invoice)}
       />
+    );
+  }
+
+  if (st.kind === "autopay") {
+    return (
+      <AutoPayFrame invoice={st.invoice}>
+        {st.view === "setup" ? (
+          <AutoPaySetup invoice={st.invoice} secret={secret} onBack={() => back()} onActive={autoPayActive} />
+        ) : (
+          <AutoPayManage invoice={st.invoice} secret={secret} onBack={() => back()} />
+        )}
+      </AutoPayFrame>
     );
   }
 
@@ -238,6 +260,7 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
           error={error}
           justPaid={justPaid}
           onPay={() => void openSession(inv)}
+          onAutoPay={toAutoPay}
         />
       </div>
     </CheckoutFrame>
@@ -464,6 +487,7 @@ function InvoiceActions({
   error,
   justPaid,
   onPay,
+  onAutoPay,
 }: {
   invoice: Invoice;
   view: InvoiceStatusView;
@@ -472,6 +496,7 @@ function InvoiceActions({
   error: string | null;
   justPaid: JustPaid | null;
   onPay: () => void;
+  onAutoPay: (view: "setup" | "manage") => void;
 }) {
   const updating = justPaid !== null && view.kind !== "paid";
   const canPay = view.payable && !updating;
@@ -493,6 +518,7 @@ function InvoiceActions({
         </div>
       ) : null}
       <DownloadPdf invoice={inv} secret={secret} receipt={view.kind === "paid"} primary={!canPay} />
+      <AutoPayEntry invoice={inv} onSetup={() => onAutoPay("setup")} onManage={() => onAutoPay("manage")} />
       {canPay ? (
         <div className="np-stack np-stack--sm">
           <p className="np-checkout__note">{t("invoice.noAccount")}</p>
@@ -620,6 +646,28 @@ function InvoiceCheckout({
  * When the page switches between the invoice and the payment flow the focused control disappears: move
  * focus to the new view's title (as the checkout does on step changes), never on first paint.
  */
+/** Auto-pay screens: the compact invoice in the desktop summary column (as during payment). */
+function AutoPayFrame({ invoice, children }: { invoice: Invoice; children: ReactNode }) {
+  const wide = useMediaQuery("(min-width: 880px)");
+  return (
+    <CheckoutFrame
+      summary={
+        wide ? <InvoiceDocument invoice={invoice} view={invoiceStatus(invoice, Date.now())} compact /> : undefined
+      }
+      banner={
+        invoice.livemode ? undefined : (
+          <Callout tone="info" title={t("app.testmode")} reference={t("app.testmodeRef")} data-testid="test-banner" />
+        )
+      }
+      links={webLinks}
+      className="ck-frame ck-invoice"
+      data-testid="invoice-page"
+    >
+      <div className="ck-flow">{children}</div>
+    </CheckoutFrame>
+  );
+}
+
 function useFocusTitle(kind: PageState["kind"]) {
   const last = useRef(kind);
   useEffect(() => {

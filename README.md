@@ -28,7 +28,7 @@ This repo stays surgical: design docs live in [`nearpay-brain`](../nearpay-brain
 | `/c/:cs_id#<client_secret>` | hosted checkout (never framed) |
 | `/embed/:cs_id#<client_secret>` | embedded checkout, framed by `nearpay-js`; accepts `np:init` only from `allowed_origins` |
 | `/l/:id` | payment link (Stage 2): anonymous link page → `createPaymentLinkSession` → continues as `/c/:id#<client_secret>` |
-| `/i/:id#<invoice_secret>` | hosted invoice (Stage 3): invoice, PDF, "Pay invoice" → the checkout flow in place (lazy-loaded chunk) |
+| `/i/:id#<invoice_secret>` | hosted invoice (Stage 3): invoice, PDF, "Pay invoice" → the checkout flow in place (lazy-loaded chunk); Stage 4: auto-pay setup and management (vault mandate funded from the payer's own NEAR account) |
 
 The client secret stays in the URL fragment and in memory; it is sent only as `X-NearPay-Client-Secret`.
 The invoice secret likewise, only as `X-NearPay-Invoice-Secret`; a wrong secret, an unknown invoice and a
@@ -56,6 +56,7 @@ Build-time constants (everything ends up in the public bundle — nothing secret
 | `VITE_TURNSTILE_SITEKEY` | `1x00000000000000000000AA` | Cloudflare's always-pass test sitekey (pairs with the local stack's test secret) |
 | `VITE_NEAR_NETWORK` | `mainnet` | NEAR Connect network |
 | `VITE_NEAR_RPC_URL` | `https://free.rpc.fastnear.com` | NEAR view calls (storage registration, Verifier salt) |
+| `VITE_SOLANA_RPC_URL` | `https://api.mainnet-beta.solana.com` | Solana wallet path: blockhash, mint owner, deposit token account, rent (origin added to CSP `connect-src`) |
 | `VITE_WALLETCONNECT_PROJECT_ID` | empty | reserved; WalletConnect is not wired yet |
 | `VITE_WEB_URL` | `https://nearpay.money` | site origin for the footer links (Help · Privacy · Terms) |
 
@@ -81,6 +82,14 @@ spec's test-vector key (pinned only in the e2e build).
 
 ## Status
 
+Step 4.3 (Phase A, spec 0.4.0 types isolated in `src/lib/spec-gap-0.4.0.ts` until 0.4.0 is published):
+Solana wallets through the Wallet Standard (SOL `System.Transfer`, SPL `CreateIdempotent` +
+`TransferChecked` from the verified attestation only, byte-for-byte against `solana-transfer.json`;
+memo / Token-2022 / unreconciled mint → manual path), Solana Pay and BIP-21 QR on the manual path, and
+hosted invoice auto-pay (terms from the parsed vault `msg`, transactions checked before the payer's NEAR
+wallet signs, mandate status, top-up / cancel / withdraw; test mode never signs). Screenshot tour:
+`NP_SHOTS=<dir> pnpm exec playwright test screens-4.3`.
+
 Step 3.3: hosted invoices `/i/:id` (all states: open, overdue, past due/uncollectible, not payable, paid
 receipt, void, expired session, not found, test mode; PDF download; pay hand-off into the unchanged
 checkout flow), spec 0.3.0 / ui 0.3.0, spec 0.2.1 checkout fields (`DepositInstructions.fee_amount`,
@@ -94,7 +103,7 @@ frame mapping in `src/app/screens.ts`), payment links, spec 0.2.0 fields (`Payme
 
 Stage 1 (step 1.3): hosted + embedded checkout, manual path, EVM (EIP-6963) and NEAR (NEAR Connect)
 wallets, Intents-balance signing (NEP-413 / ERC-191), sentinel verification, live status (SSE +
-polling), test mode. Solana wallets (Stage 4) and WalletConnect are not built yet.
+polling), test mode. WalletConnect is not built yet.
 
 ## Built with
 

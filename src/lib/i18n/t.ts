@@ -1,8 +1,15 @@
 import { en, type MessageKey } from "./messages.en";
 
+/** Catalogs registered by lazy chunks (e.g. the invoice page's auto-pay copy). */
+const extra: Record<string, string> = {};
+
+export function registerMessages(messages: Readonly<Record<string, string>>): void {
+  Object.assign(extra, messages);
+}
+
 /** Looks up a message and substitutes `{name}` placeholders. Unknown keys fall back to the key itself. */
 export function t(key: MessageKey, vars: Record<string, string | number> = {}): string {
-  const template: string = en[key] ?? key;
+  const template: string = (en as Record<string, string>)[key] ?? extra[key] ?? key;
   return template.replace(/\{([a-zA-Z_]+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m));
 }
 

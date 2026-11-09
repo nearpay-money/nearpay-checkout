@@ -34,8 +34,16 @@ import {
 } from "@nearpay/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
+import {
+  createPublicInvoiceMandateFunding,
+  getPublicInvoiceMandate,
+  type MandateFundingInstructions,
+  PublicInvoice as PublicInvoice040,
+  type PublicMandate,
+} from "../../../src/lib/spec-gap-0.4.0/billing";
 import { SEED, sentinelVectors } from "../../support/fixtures";
 import { type InvoiceFixture, invoice as invoiceFixture } from "../../support/invoices";
+import { funding as fundingFixture } from "../../support/mandates";
 import {
   type Attempt,
   attempt as attemptFixture,
@@ -107,6 +115,11 @@ export interface MockInvoice {
   paidLagMs: number;
   /** The PDF route fails with this status. */
   pdfStatus: number | null;
+  /** Auto-pay (Stage 4): funding instructions for a request body; error code for the next funding call. */
+  funding: (body: { payer?: string; periods?: number }) => MandateFundingInstructions;
+  fundingError: string | null;
+  /** The subscription's mandate (`getPublicInvoiceMandate`); null → 404. */
+  mandate: PublicMandate | null;
 }
 
 export interface Call {
@@ -130,6 +143,8 @@ const ROUTES: AnyRoute[] = [
   getPublicInvoice,
   createPublicInvoiceSession,
   getPublicInvoicePdf,
+  createPublicInvoiceMandateFunding as unknown as AnyRoute,
+  getPublicInvoiceMandate as unknown as AnyRoute,
 ];
 
 const ERRORS: Record<string, [number, string]> = {
@@ -148,6 +163,8 @@ const ERRORS: Record<string, [number, string]> = {
   invoice_not_payable: [409, "state_conflict"],
   destination_not_active: [409, "state_conflict"],
   rate_limited: [429, "rate_limit_error"],
+  auto_debit_unavailable: [422, "invalid_request_error"],
+  vault_cap_exceeded: [422, "invalid_request_error"],
 };
 
 const MIME: Record<string, string> = {
@@ -322,6 +339,15 @@ export class MockNearPay {
       sessionOpts: {},
       paidLagMs: 0,
       pdfStatus: null,
+      funding: (b) =>
+        fundingFixture({
+          livemode: invoice.livemode,
+          periods: b.periods ?? 3,
+          payer: b.payer ?? null,
+          registered: false,
+        }),
+      fundingError: null,
+      mandate: null,
       ...opts,
     };
     this.invoices.set(id, m);
@@ -468,8 +494,14 @@ export class MockNearPay {
       );
     }
 
-    if (route === getPublicInvoice || route === createPublicInvoiceSession || route === getPublicInvoicePdf) {
-      return this.invoiceRoute(route, req, res, path.split("/")[3] as string);
+    if (
+      route === getPublicInvoice ||
+      route === createPublicInvoiceSession ||
+      route === getPublicInvoicePdf ||
+      route === (createPublicInvoiceMandateFunding as unknown as AnyRoute) ||
+      route === (getPublicInvoiceMandate as unknown as AnyRoute)
+    ) {
+      return this.invoiceRoute(route, req, res, path.split("/")[3] as string, body);
     }
 
     const id = path.split("/")[4] as string;
@@ -509,13 +541,29 @@ export class MockNearPay {
     return apiError(res, "resource_missing");
   }
 
-  private invoiceRoute(route: AnyRoute, req: IncomingMessage, res: ServerResponse, id: string) {
+  private invoiceRoute(route: AnyRoute, req: IncomingMessage, res: ServerResponse, id: string, body?: unknown) {
     const m = this.invoices.get(id);
     // Unknown id → 404, wrong secret → 401: the page must render both identically (no oracle).
     if (!m) return apiError(res, "resource_missing");
     if (req.headers["x-nearpay-invoice-secret"] !== m.secret) return apiError(res, "invoice_secret_invalid");
     const inv = m.invoice;
+    if (route === (createPublicInvoiceMandateFunding as unknown as AnyRoute)) {
+      if (m.fundingError) {
+        const code = m.fundingError;
+        m.fundingError = null;
+        return apiError(res, code);
+      }
+      if (inv.status === "paid" || inv.status === "void") return apiError(res, "invoice_not_payable");
+      const f = m.funding((body ?? {}) as { payer?: string; periods?: number });
+      return send(res, 200, check(createPublicInvoiceMandateFunding.response, f, "mandate funding"));
+    }
+    if (route === (getPublicInvoiceMandate as unknown as AnyRoute)) {
+      if (!m.mandate) return apiError(res, "resource_missing");
+      return send(res, 200, check(getPublicInvoiceMandate.response, m.mandate, "mandate"));
+    }
     if (route === getPublicInvoice) {
+      const r0 = safeParseTolerant(PublicInvoice040, inv);
+      if (!r0.success) throw new Error(`mock produced an invalid 0.4.0 invoice: ${JSON.stringify(r0.error)}`);
       const r = safeParseTolerant(PublicInvoice, inv);
       if (!r.success) throw new Error(`mock produced an invalid invoice: ${JSON.stringify(r.error)}`);
       return send(res, 200, inv);
