@@ -49,6 +49,10 @@ test("setup: clear terms, payer notice, own-account confirmation, wallet signs e
   await expect(page.getByTestId("autopay-storage")).toContainText("0.012 NEAR");
   await expect(page.getByTestId("autopay-payer-notice")).toContainText("from your own NEAR account");
   await expect(page.getByTestId("autopay-facts")).toContainText("not with NearPay or the merchant");
+  await expect(page.getByTestId("autopay-fee")).toContainText("NearPay's 1% out of each collection");
+  await expect(page.getByTestId("autopay-facts")).toContainText("from the NEAR account you pay with");
+  await expect(page.getByTestId("autopay-payer-notice")).toContainText("from the NEAR account you pay with");
+  await expect(page.getByText(/any NEAR wallet/)).toHaveCount(0);
   // No unverified merchant name anywhere (L-CK-03).
   await expect(page.getByText("Acme (unverified)")).toHaveCount(0);
   await a11yBasics(page);

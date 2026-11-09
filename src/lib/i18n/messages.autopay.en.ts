@@ -47,11 +47,17 @@ export const autopayEn = {
   "autopay.upTo": "up to ",
   "autopay.rawAmount": "{amount} base units of {token}",
   "autopay.factLimit": "The merchant can collect at most this amount {every}, and only when it is due.",
-  "autopay.factCancel": "Cancel at any time from any NEAR wallet. The remaining balance goes back to your account.",
+  "autopay.factCancel":
+    "Cancel at any time from the NEAR account you pay with (in any wallet app that holds it); the remaining balance goes back to it.",
+  "autopay.noticeCancel":
+    "You can cancel at any time from the NEAR account you pay with; the remaining balance goes back to it.",
   "autopay.factCustody":
     "Your balance sits in the vault smart contract, not with NearPay or the merchant. NearPay can't move it.",
   "autopay.factFees":
     "No fees are added for you. The merchant pays NearPay's {fee}% out of each collection; your wallet pays a small NEAR network fee.",
+  "autopay.factFeesNone": "No fees are added for you; your wallet pays a small NEAR network fee.",
+  "autopay.factFeesNoRate":
+    "No fees are added for you. The merchant pays NearPay's fee out of each collection; your wallet pays a small NEAR network fee.",
   "autopay.noticeTitle": "Sign from your own NEAR account",
   "autopay.ownAccount": "I'm signing from my own NEAR account, not a relayer, gasless or smart wallet",
   "autopay.signingAs": "Signing as {account} ({wallet})",

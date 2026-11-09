@@ -48,12 +48,14 @@ import {
   exitTransaction,
   type Funding,
   type FundingTerms,
+  feeFact,
   MANDATE_POLL_MAX,
   MANDATE_POLL_MS,
   type Mandate,
   mandateView,
   nearMoney,
   PERIOD_CHOICES,
+  payerNoticeText,
   periodLabel,
   startAtMs,
   type TokenMeta,
@@ -446,6 +448,7 @@ export function AutoPaySetup({
       : []),
   ];
   const canSign = live && own && !busy;
+  const fee = feeFact(terms.feeBps);
   return (
     <section className="ck-screen" aria-labelledby="ck-autopay-title" data-testid="autopay-terms">
       <ScreenTitle id="ck-autopay-title" title={t("autopay.setupTitle")} lede={t("autopay.setupLede")} />
@@ -472,10 +475,10 @@ export function AutoPaySetup({
         <li>{t("autopay.factLimit", { every: every(terms.periodSecs) })}</li>
         <li>{t("autopay.factCancel")}</li>
         <li>{t("autopay.factCustody")}</li>
-        <li>{t("autopay.factFees", { fee: (terms.feeBps / 100).toString() })}</li>
+        <li data-testid="autopay-fee">{t(fee.key, fee.vars)}</li>
       </ul>
       <Callout tone="warning" title={t("autopay.noticeTitle")} data-testid="autopay-payer-notice">
-        {f.payer_notice}
+        {payerNoticeText(f.payer_notice, t("autopay.noticeCancel"))}
       </Callout>
       {live ? (
         <>

@@ -228,6 +228,37 @@ export function checkFunding(f: Funding, payer: string | null): FundingCheck {
   };
 }
 
+// ---- copy derived from the prepared terms ------------------------------------------------------------
+
+/** `fee_bps` as a percentage string without floats ("1", "1.25", "0.5"); null when absent or invalid. */
+export function feePercent(bps: number | null | undefined): string | null {
+  if (typeof bps !== "number" || !Number.isInteger(bps) || bps < 0 || bps > 10_000) return null;
+  const whole = Math.floor(bps / 100);
+  const frac = String(bps % 100)
+    .padStart(2, "0")
+    .replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : String(whole);
+}
+
+/** The fee bullet for the prepared `fee_bps`: with the rate, "no NearPay fee", or without a rate. */
+export function feeFact(bps: number | null | undefined): { key: MessageKey; vars: Record<string, string> } {
+  const pct = feePercent(bps);
+  if (pct === null) return { key: "autopay.factFeesNoRate", vars: {} };
+  if (pct === "0") return { key: "autopay.factFeesNone", vars: {} };
+  return { key: "autopay.factFees", vars: { fee: pct } };
+}
+
+/**
+ * The sentence of billing's default `payer_notice` (spec 0.4.0 `MANDATE_FUNDING_PAYER_NOTICE`) that
+ * overstates who can cancel: the vault accepts cancel/withdraw only from the paying account (spec CR).
+ */
+const NOTICE_ANY_WALLET = "You can cancel at any time from any NEAR wallet and get the remaining balance back.";
+
+/** `payer_notice` as shown: verbatim, except the inaccurate cancel sentence, which is corrected. */
+export function payerNoticeText(notice: string, corrected: string): string {
+  return notice.includes(NOTICE_ANY_WALLET) ? notice.replace(NOTICE_ANY_WALLET, corrected) : notice;
+}
+
 /** `start_at` (ns string) → epoch ms; null = now. */
 export const startAtMs = (ns: string | null): number | null => (ns === null ? null : Number(BigInt(ns) / 1_000_000n));
 

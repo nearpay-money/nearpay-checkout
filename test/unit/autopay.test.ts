@@ -1,5 +1,7 @@
 /** Hosted invoice auto-pay (Stage 4, §4.4): funding checks before signing, mandate view, payer transactions. */
 import { describe, expect, it } from "vitest";
+import { autopayEn } from "../../src/lib/i18n/messages.autopay.en";
+import { registerMessages, t } from "../../src/lib/i18n/t";
 import {
   MANDATE_FUNDING_PAYER_NOTICE,
   MandateFundingInstructions,
@@ -9,7 +11,10 @@ import {
 import {
   checkFunding,
   exitTransaction,
+  feeFact,
+  feePercent,
   mandateView,
+  payerNoticeText,
   periodLabel,
   startAtMs,
   tokenMeta,
@@ -221,5 +226,42 @@ describe("mandate view and payer transactions", () => {
     expect(
       tokenMeta("x.near", { asset_id: "nep141:x.near", pricing_asset: { symbol: "X", decimals: 18 } as never }),
     ).toEqual({ symbol: "X", decimals: 18 });
+  });
+});
+
+describe("copy derived from the prepared terms", () => {
+  it("renders the fee from fee_bps without floats; omits the rate when absent", () => {
+    expect(feePercent(100)).toBe("1");
+    expect(feePercent(125)).toBe("1.25");
+    expect(feePercent(50)).toBe("0.5");
+    expect(feePercent(5)).toBe("0.05");
+    expect(feePercent(0)).toBe("0");
+    expect(feePercent(null)).toBeNull();
+    expect(feePercent(undefined)).toBeNull();
+    expect(feePercent(1.5)).toBeNull();
+    expect(feePercent(10_001)).toBeNull();
+    const text = (bps: number | null) => {
+      const f = feeFact(bps);
+      return t(f.key, f.vars);
+    };
+    registerMessages(autopayEn);
+    expect(text(250)).toContain("NearPay's 2.5% out of each collection");
+    expect(text(100)).toContain("NearPay's 1% out of each collection");
+    expect(text(0)).toBe("No fees are added for you; your wallet pays a small NEAR network fee.");
+    expect(text(null)).toContain("The merchant pays NearPay's fee out of each collection");
+    expect(text(null)).not.toMatch(/%/);
+    // The fee shown is the one in the checked vault msg.
+    const r = checkFunding(funding(), null);
+    expect(r.ok && feeFact(r.terms.feeBps).vars.fee).toBe("1");
+  });
+
+  it("corrects billing's default cancel sentence: only the paying account can cancel", () => {
+    const fixed =
+      "You can cancel at any time from the NEAR account you pay with; the remaining balance goes back to it.";
+    const shown = payerNoticeText(MANDATE_FUNDING_PAYER_NOTICE, fixed);
+    expect(shown).not.toContain("any NEAR wallet");
+    expect(shown).toContain(fixed);
+    expect(shown).toContain("Sign both transactions from your own NEAR account");
+    expect(payerNoticeText("Sign from your own account.", fixed)).toBe("Sign from your own account.");
   });
 });
