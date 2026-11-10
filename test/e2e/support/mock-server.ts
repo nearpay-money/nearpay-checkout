@@ -89,6 +89,8 @@ export interface MockSession {
   attestToken?: { standard: string; address: string | null } | null;
   /** Symbol/decimals sentinel attests (default USDC/6). */
   attestMeta?: { symbol: string; decimals: number };
+  /** Destination sentinel attests (default USDC on NEAR). */
+  attestDestination?: { asset_id: string; chain: string };
   streams: Set<ServerResponse>;
 }
 
@@ -716,7 +718,10 @@ export class MockNearPay {
             },
           }),
       merchant: { name: "Acme GmbH", kyb_verified: true },
-      destination: { asset_id: USDC_NEAR, chain: "near:mainnet", fingerprint: "YZMN-R81Z-BR" },
+      destination: {
+        ...(s.attestDestination ?? { asset_id: USDC_NEAR, chain: "near:mainnet" }),
+        fingerprint: "YZMN-R81Z-BR",
+      },
       issued_at: new Date().toISOString(),
       expires_at: deadline,
     };

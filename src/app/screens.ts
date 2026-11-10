@@ -5,6 +5,7 @@
  * `send_manual`, `received_less`, `test_payment`, …) is only reachable from phases that require a
  * verified attestation.
  */
+import { chainName } from "../lib/chains/chains";
 import type { State } from "./machine";
 
 export type ScreenId =
@@ -130,4 +131,37 @@ export const PHASE_SCREENS: Readonly<Record<State["phase"], readonly ScreenId[]>
 /** Phases whose "Back" goes one step back inside the flow. */
 export function canGoBack(s: State): boolean {
   return s.phase === "connect_wallet" || s.phase === "choose_asset";
+}
+
+/**
+ * Destination chains whose evidence usually lands within a minute: L2 block confirmations on Base and Arbitrum
+ * (ADR-0022), NEAR finality, Solana `finalized`. Others (Ethereum `finalized`, Bitcoin confirmations) take longer.
+ */
+export const FAST_CONFIRMING_CHAINS: ReadonlySet<string> = new Set([
+  "eip155:8453",
+  "eip155:42161",
+  "near:mainnet",
+  "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
+]);
+
+/**
+ * Body of the "Confirming your payment" frame. While the attempt is `verifying` (the funds reached the merchant's
+ * chain and NearPay is confirming them) it names the attested destination chain: "Payment received — confirming on
+ * Base (usually under a minute)."; otherwise (deposit seen, swap settling) the generic text.
+ */
+export function confirmingBody(
+  attemptStatus: string | null | undefined,
+  destinationChain: string | null | undefined,
+): { readonly key: "confirming.body" | "confirming.bodyChain" | "confirming.bodyChainFast"; readonly chain?: string } {
+  if (attemptStatus !== "verifying" || !destinationChain) return { key: "confirming.body" };
+  const chain = chainName(destinationChain);
+  return FAST_CONFIRMING_CHAINS.has(destinationChain)
+    ? { key: "confirming.bodyChainFast", chain }
+    : { key: "confirming.bodyChain", chain };
+}
+
+/** `HH:MM:SS` (24 h, local time) of a "Check status" press, for "Still confirming · checked 14:03:07". */
+export function checkedAtLabel(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }

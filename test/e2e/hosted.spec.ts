@@ -96,6 +96,37 @@ test("I've sent it signals the deposit and waits for detection", async ({ page, 
   await expect(page.getByTestId("succeeded")).toBeVisible();
 });
 
+test("verifying names the destination chain; Still confirming → Check status gives feedback", async ({
+  page,
+  mock,
+}) => {
+  await page.clock.install();
+  const s = mock.create({}, { attestDestination: { asset_id: USDC_BASE, chain: "eip155:8453" } });
+  await manualToInstructions(page, mock, s);
+  await page.getByTestId("confirm-network").check();
+  await page.getByTestId("sent").click();
+  await expect(page.getByTestId("processing")).toBeVisible();
+  mock.setAttempt(s, { status: "deposit_detected", attestation_ticket: null });
+  await expect(page.getByTestId("processing")).toContainText("Keep this page open while we confirm it");
+  // ADR-0022: the funds are on the merchant's chain; NearPay confirms them on Base's own blocks
+  mock.setAttempt(s, { status: "verifying", attestation_ticket: null });
+  await expect(page.getByTestId("processing")).toContainText(
+    "Payment received — confirming on Base (usually under a minute).",
+  );
+  // two minutes later: "Still confirming" with a working "Check status"
+  await page.clock.fastForward(121_000);
+  await expect(page.getByTestId("check-status")).toBeVisible();
+  const before = mock.callsTo("getPublicCheckoutSession").length;
+  await page.getByTestId("check-status").click();
+  await expect(page.getByTestId("check-status")).toHaveAttribute("aria-disabled", "true"); // spinner while reloading
+  await expect(page.getByTestId("check-status")).toContainText("Checking…");
+  await page.clock.fastForward(1_000);
+  await expect(page.getByTestId("checked-at")).toHaveText(/^Still confirming · checked \d{2}:\d{2}:\d{2}$/);
+  expect(mock.callsTo("getPublicCheckoutSession").length).toBeGreaterThan(before);
+  mock.succeed(s);
+  await expect(page.getByTestId("succeeded")).toBeVisible();
+});
+
 test("a memo must be confirmed before the address is shown", async ({ page, mock }) => {
   const s = mock.create({}, { memo: "4471" });
   await manualToInstructions(page, mock, s);
