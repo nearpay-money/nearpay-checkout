@@ -1,12 +1,35 @@
 /** Injected test wallets: an EIP-6963 EVM provider and the e2e build's NEAR wallet hook. */
 import type { Page } from "@playwright/test";
 
+/**
+ * Read-only answers of the mock EVM provider (token picker balances, network-fee pre-check). Without
+ * them the provider refuses those methods (4200), as wallets without the data would fail.
+ */
+export interface EvmReads {
+  /** Native balance (hex wei). */
+  readonly native: string;
+  /** ERC-20 balances by lower-case token address (hex base units); others are 0. */
+  readonly tokens?: Record<string, string>;
+  /** `eth_estimateGas` / `eth_gasPrice` / latest `baseFeePerGas` / OP-stack L1 fee upper bound (hex). */
+  readonly gas?: {
+    readonly estimate: string;
+    readonly price: string;
+    readonly baseFee?: string;
+    readonly l1Fee?: string;
+  };
+}
+
 export async function injectEvmWallet(
   page: Page,
-  opts: { chainId?: string; reject?: boolean; sendError?: "reject" | "insufficient" | "hang" | null } = {},
+  opts: {
+    chainId?: string;
+    reject?: boolean;
+    sendError?: "reject" | "insufficient" | "hang" | null;
+    reads?: EvmReads | null;
+  } = {},
 ): Promise<void> {
   await page.addInitScript(
-    ({ chainId, reject, sendError }) => {
+    ({ chainId, reject, sendError, reads }) => {
       const w = window as unknown as Record<string, unknown>;
       const calls: { method: string; params?: unknown }[] = [];
       w.__evmCalls = calls;
@@ -31,9 +54,33 @@ export async function injectEvmWallet(
               return `0x${"ab".repeat(32)}`;
             case "personal_sign":
               return `0x${"11".repeat(64)}1b`;
-            default:
-              throw Object.assign(new Error("unsupported"), { code: 4200 });
+            case "eth_getBalance":
+              if (!reads) break;
+              return reads.native;
+            case "eth_call": {
+              if (!reads) break;
+              const c = (params as { to: string; data: string }[])[0] as { to: string; data: string };
+              if (c.to.toLowerCase() === "0x420000000000000000000000000000000000000f") {
+                if (reads.gas?.l1Fee) return reads.gas.l1Fee;
+                break;
+              }
+              if (c.data.startsWith("0x70a08231")) return reads.tokens?.[c.to.toLowerCase()] ?? "0x0";
+              break;
+            }
+            case "eth_estimateGas":
+              if (!reads?.gas) break;
+              return reads.gas.estimate;
+            case "eth_gasPrice":
+              if (!reads?.gas) break;
+              return reads.gas.price;
+            case "eth_getBlockByNumber":
+              if (!reads?.gas?.baseFee) break;
+              return { baseFeePerGas: reads.gas.baseFee };
+            case "eth_maxPriorityFeePerGas":
+              if (!reads?.gas) break;
+              return "0x0";
           }
+          throw Object.assign(new Error("unsupported"), { code: 4200 });
         },
       };
       const info = {
@@ -49,7 +96,12 @@ export async function injectEvmWallet(
       window.addEventListener("eip6963:requestProvider", announce);
       announce();
     },
-    { chainId: opts.chainId ?? "0x1", reject: opts.reject ?? false, sendError: opts.sendError ?? null },
+    {
+      chainId: opts.chainId ?? "0x1",
+      reject: opts.reject ?? false,
+      sendError: opts.sendError ?? null,
+      reads: opts.reads ?? null,
+    },
   );
 }
 
@@ -80,12 +132,58 @@ export async function injectNearWallet(page: Page): Promise<void> {
   });
 }
 
-/** NEAR RPC stub: storage not registered, bounds min, Verifier salt. */
-export async function stubNearRpc(page: Page, registered = false): Promise<string[]> {
+/** Balances the NEAR RPC stub answers (defaults: plenty of everything). */
+export interface NearReads {
+  /** `ft_balance_of` by token account. */
+  readonly ft?: Record<string, string>;
+  /** Intents `mt_balance_of` by token id. */
+  readonly mt?: Record<string, string>;
+  /** `view_account` amount (yoctoNEAR) — storage usage is 0. */
+  readonly native?: string;
+  readonly gasPrice?: string;
+}
+
+const NEAR_PLENTY = "1000000000000";
+
+/**
+ * NEAR RPC stub: storage not registered, bounds min, Verifier salt, balances (`ft_balance_of`,
+ * `mt_balance_of`, `view_account`) and the gas price. Records the view method names called (plus
+ * `view_account` / `gas_price`).
+ */
+export async function stubNearRpc(page: Page, registered = false, reads: NearReads = {}): Promise<string[]> {
   const methods: string[] = [];
   await page.route("https://free.rpc.fastnear.com/**", async (route) => {
-    const body = JSON.parse(route.request().postData() ?? "{}") as { params: { method_name: string } };
-    methods.push(body.params.method_name);
+    const body = JSON.parse(route.request().postData() ?? "{}") as {
+      method: string;
+      params: { method_name?: string; request_type?: string; args_base64?: string };
+    };
+    const fulfill = (result: unknown) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ jsonrpc: "2.0", id: "np", result }),
+      });
+    if (body.method === "gas_price") {
+      methods.push("gas_price");
+      return fulfill({ gas_price: reads.gasPrice ?? "100000000" });
+    }
+    if (body.params.request_type === "view_account") {
+      methods.push("view_account");
+      return fulfill({ amount: reads.native ?? "10000000000000000000000000", locked: "0", storage_usage: 0 });
+    }
+    const method = body.params.method_name ?? "";
+    methods.push(method);
+    const args = JSON.parse(Buffer.from(body.params.args_base64 ?? "", "base64").toString() || "{}") as {
+      token_id?: string;
+    };
+    if (method === "ft_balance_of" || method === "mt_balance_of") {
+      const contract = (body.params as { account_id?: string }).account_id ?? "";
+      const v =
+        method === "ft_balance_of"
+          ? (reads.ft?.[contract] ?? NEAR_PLENTY)
+          : (reads.mt?.[args.token_id ?? ""] ?? NEAR_PLENTY);
+      return fulfill({ result: Array.from(Buffer.from(JSON.stringify(v))) });
+    }
     const value =
       body.params.method_name === "storage_balance_of"
         ? registered
@@ -166,36 +264,55 @@ export async function injectSolanaWallet(
 }
 
 /** Solana RPC stub: blockhash, mint owner (classic Token unless `token2022`), deposit ATA missing, rent. */
-export async function stubSolanaRpc(page: Page, opts: { token2022?: boolean; down?: boolean } = {}): Promise<string[]> {
+export async function stubSolanaRpc(
+  page: Page,
+  opts: {
+    token2022?: boolean;
+    down?: boolean;
+    /** Payer balances: lamports and classic-Token amounts by mint (defaults: 1 SOL, 100 USDC). */
+    balances?: { sol?: number; spl?: Record<string, string> };
+  } = {},
+): Promise<string[]> {
   const methods: string[] = [];
   await page.route("https://api.mainnet-beta.solana.com/**", async (route) => {
     const body = JSON.parse(route.request().postData() ?? "{}") as { method: string; params: unknown[] };
     methods.push(body.method);
     if (opts.down) return route.fulfill({ status: 503, body: "down" });
+    const spl = opts.balances?.spl ?? { EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v: "100000000" };
     const result =
-      body.method === "getLatestBlockhash"
-        ? {
-            context: { slot: 1 },
-            value: { blockhash: "AX2DPY1mMojpmUNuoYycmtqmkRQ9hX8sgYKKiWUvCHZv", lastValidBlockHeight: 10 },
-          }
-        : body.method === "getMinimumBalanceForRentExemption"
-          ? 2039280
-          : body.method === "getAccountInfo"
+      body.method === "getBalance"
+        ? { context: { slot: 1 }, value: opts.balances?.sol ?? 1_000_000_000 }
+        : body.method === "getTokenAccountsByOwner"
+          ? {
+              context: { slot: 1 },
+              value: Object.entries(spl).map(([mint, amount]) => ({
+                pubkey: "11111111111111111111111111111111",
+                account: { data: { parsed: { info: { mint, tokenAmount: { amount } } } } },
+              })),
+            }
+          : body.method === "getLatestBlockhash"
             ? {
                 context: { slot: 1 },
-                value:
-                  body.params[0] === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-                    ? {
-                        owner: opts.token2022
-                          ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
-                          : "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-                        lamports: 1,
-                        data: ["", "base64"],
-                        executable: false,
-                      }
-                    : null,
+                value: { blockhash: "AX2DPY1mMojpmUNuoYycmtqmkRQ9hX8sgYKKiWUvCHZv", lastValidBlockHeight: 10 },
               }
-            : null;
+            : body.method === "getMinimumBalanceForRentExemption"
+              ? 2039280
+              : body.method === "getAccountInfo"
+                ? {
+                    context: { slot: 1 },
+                    value:
+                      body.params[0] === "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+                        ? {
+                            owner: opts.token2022
+                              ? "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                              : "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+                            lamports: 1,
+                            data: ["", "base64"],
+                            executable: false,
+                          }
+                        : null,
+                  }
+                : null;
     await route.fulfill({
       status: 200,
       contentType: "application/json",

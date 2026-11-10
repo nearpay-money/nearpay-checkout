@@ -61,3 +61,15 @@ export function formatPrice(
 export function gte(a: string, b: string): boolean {
   return BigInt(a) >= BigInt(b);
 }
+
+/**
+ * `amount` rounded UP to `digits` significant digits (base units), for "You need about 0.00002 ETH":
+ * never understates what is needed.
+ */
+export function roundUpSignificant(amount: bigint, digits = 2): bigint {
+  if (amount <= 0n) return 0n;
+  const len = amount.toString().length;
+  if (len <= digits) return amount;
+  const unit = 10n ** BigInt(len - digits);
+  return ((amount + unit - 1n) / unit) * unit;
+}

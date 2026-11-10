@@ -2,7 +2,8 @@ import { defineConfig } from "vitest/config";
 
 // Unit tests run in Node against the pure modules (no DOM). The coverage gate (foundations §16) is on the
 // money-path and state logic: sentinel verification, wallet transaction builders, validators, the UI
-// state machine, the SSE client, the embed protocol, the hosted-invoice display logic, the build-time key pinning and the NEAR wallet manifest pinning.
+// state machine, the SSE client, the embed protocol, the hosted-invoice display logic, the build-time key pinning and the NEAR wallet manifest pinning,
+// the token-picker balance logic and reads, the network-fee pre-check and the dropdown picker's keyboard model.
 export default defineConfig({
   define: {
     __NP_CONFIG__: JSON.stringify({
@@ -28,10 +29,17 @@ export default defineConfig({
         "src/features/refund-address/validate.ts",
         "src/features/deposit-instructions/qr.ts",
         "src/features/asset-picker/options.ts",
+        "src/features/asset-picker/tokens.ts",
+        "src/features/asset-picker/balance-reads.ts",
+        "src/features/gas-check/gas.ts",
+        "src/ui/picker-model.ts",
         "src/features/status-stream/*.ts",
         "src/wallets/evm/tx.ts",
         "src/wallets/near/tx.ts",
         "src/wallets/near/rpc.ts",
+        "src/wallets/near/balances.ts",
+        "src/wallets/evm/reads.ts",
+        "src/wallets/solana/balances.ts",
         "src/wallets/near/pinning.ts",
         "src/wallets/intents/*.ts",
         "src/routes/embed/protocol.ts",

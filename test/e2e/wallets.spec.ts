@@ -1,9 +1,20 @@
 import { MultiPayload } from "@nearpay/spec";
 import { USDC_BASE, USDC_NEAR } from "../support/sessions";
 import { expect, test } from "./support/fixtures";
+import { choose } from "./support/pay";
 import { injectEvmWallet, injectNearWallet, stubNearRpc } from "./support/wallets";
 
 const TOKEN = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
+/** Read-only EVM provider methods (no wallet prompt). */
+const READS = new Set([
+  "eth_chainId",
+  "eth_call",
+  "eth_getBalance",
+  "eth_estimateGas",
+  "eth_gasPrice",
+  "eth_getBlockByNumber",
+  "eth_maxPriorityFeePerGas",
+]);
 const DEPOSIT = "0x76b4c56085ed136a8744d52be956396624a730e8";
 
 test("EVM wallet (live): switches to Base and sends the attested ERC-20 transfer", async ({ page, mock }) => {
@@ -15,9 +26,11 @@ test("EVM wallet (live): switches to Base and sends the attested ERC-20 transfer
   await page.getByTestId("evm-wallet-test.mockwallet").click();
   await expect(page.getByTestId("connected-wallet")).toContainText("Mock Wallet");
   // EVM wallets see EVM routes and the Intents transfer, never NEAR deposits.
-  await expect(page.getByTestId(`option-route_quote-${USDC_NEAR}`)).toHaveCount(0);
-  await expect(page.getByTestId(`option-intents_transfer-${USDC_NEAR}`)).toBeVisible();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await page.getByTestId("network-picker-trigger").click();
+  await expect(page.getByTestId("network-near:mainnet")).toHaveCount(0);
+  await expect(page.getByTestId("network-intents")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await choose(page, "route_quote", USDC_BASE);
   await expect(page.getByTestId("refund-address")).toHaveCount(0);
   await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await expect(page.getByTestId("wallet-pay")).toContainText("Your wallet will switch to Base.");
@@ -30,13 +43,14 @@ test("EVM wallet (live): switches to Base and sends the attested ERC-20 transfer
     (await page.evaluate(
       () => (window as unknown as { __evmCalls: { method: string; params?: unknown[] }[] }).__evmCalls,
     )) ?? [];
-  expect(calls.map((c) => c.method)).toEqual([
+  // Prompts and writes only (balance and fee reads are read-only provider calls): connect, switch, send.
+  expect(calls.map((c) => c.method).filter((m) => !READS.has(m))).toEqual([
     "eth_requestAccounts",
-    "eth_chainId",
     "wallet_switchEthereumChain",
-    "eth_chainId",
     "eth_sendTransaction",
   ]);
+  // The wallet was on Ethereum: no balances read there for Base (the picker offered a switch instead).
+  expect(calls.some((c) => c.method === "eth_call")).toBe(false);
   const tx = calls.at(-1)?.params?.[0] as Record<string, string>;
   expect(tx).toEqual({
     from: "0x42E06263bb5346ae6421aB1Ec1019824e7B284E1",
@@ -54,7 +68,7 @@ test("EVM wallet in test mode never broadcasts: simulate instead", async ({ page
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("evm-wallet-test.mockwallet").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   await page.getByTestId("simulate").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
@@ -92,12 +106,17 @@ test("NEAR wallet (live): registers storage and ft_transfers the attested amount
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
   await expect(page.getByTestId("connected-wallet")).toContainText("payer.near");
-  await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`)).toHaveCount(0);
-  await page.getByTestId(`option-route_quote-${USDC_NEAR}`).click();
+  await page.getByTestId("network-picker-trigger").click();
+  await expect(page.getByTestId("network-eip155:8453")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await choose(page, "route_quote", USDC_NEAR);
   await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
-  expect(rpc.sort()).toEqual(["storage_balance_bounds", "storage_balance_of"]);
+  // Picker balance + network-fee pre-check reads, then the storage registration of the transfer.
+  expect(new Set(rpc)).toEqual(
+    new Set(["ft_balance_of", "storage_balance_of", "storage_balance_bounds", "view_account", "gas_price"]),
+  );
   const calls = await page.evaluate(
     () => (window as unknown as { __nearCalls: { method: string; params: unknown }[] }).__nearCalls,
   );
@@ -119,11 +138,12 @@ test("NEAR Intents balance (live): signs the attested requirement with NEP-413",
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
-  await page.getByTestId(`option-intents_transfer-${USDC_NEAR}`).click();
+  await choose(page, "intents_transfer", USDC_NEAR);
   await expect(page.getByTestId("wallet-pay")).toContainText("Pay 2.006 USDC");
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
-  expect(rpc).toEqual(["current_salt"]);
+  // Balances for the picker, then the Verifier salt; an Intents transfer needs no gas (no fee pre-check).
+  expect(rpc.filter((m) => !m.endsWith("_balance_of") && m !== "view_account")).toEqual(["current_salt"]);
   expect(mock.bodyOf("createPaymentAttempt").payer_wallet).toBe("payer.near");
   const body = mock.callsTo("submitSignedIntent")[0]?.body as { signed: unknown };
   const signed = MultiPayload.parse(body.signed);
@@ -148,7 +168,7 @@ test("EVM Intents balance (live): ERC-191 personal_sign from the eth-implicit ac
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("evm-wallet-test.mockwallet").click();
-  await page.getByTestId(`option-intents_transfer-${USDC_NEAR}`).click();
+  await choose(page, "intents_transfer", USDC_NEAR);
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
   expect(mock.bodyOf("createPaymentAttempt").payer_wallet).toBe("0x42e06263bb5346ae6421ab1ec1019824e7b284e1");
@@ -163,7 +183,7 @@ test("a tampered Intents requirement is refused before any signature is requeste
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
-  await page.getByTestId(`option-intents_transfer-${USDC_NEAR}`).click();
+  await choose(page, "intents_transfer", USDC_NEAR);
   await expect(page.getByTestId("verify-failed")).toBeVisible();
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __nearCalls: unknown[] }).__nearCalls.length)).toBe(0);

@@ -10,6 +10,7 @@ import type { Page } from "@playwright/test";
 import { mandate, withdrawTx } from "../support/mandates";
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay } from "./support/mock-server";
+import { choose } from "./support/pay";
 import { injectNearWallet, injectSolanaWallet, SOL_PAYER, stubSolanaRpc } from "./support/wallets";
 
 const DIR = process.env.NP_SHOTS ?? "";
@@ -64,7 +65,7 @@ for (const [w, h] of WIDTHS) {
       await expect(page.getByTestId("sol-wallet-mock-phantom")).toBeVisible();
       await shot(page, "01-connect-wallet-solana");
       await page.getByTestId("sol-wallet-mock-phantom").click();
-      await page.getByTestId(`option-route_quote-${SPL}`).click();
+      await choose(page, "route_quote", SPL);
       await expect(page.getByTestId("network-fee-note")).toContainText("rent");
       await shot(page, "02-review-spl-rent");
 
@@ -74,7 +75,7 @@ for (const [w, h] of WIDTHS) {
       await stubExternal(p2);
       await solWallet(p2, mock, { sendError: "Transaction simulation failed: blockhash not found" });
       await p2.getByTestId("sol-wallet-mock-phantom").click();
-      await p2.getByTestId(`option-route_quote-${SPL}`).click();
+      await choose(p2, "route_quote", SPL);
       await p2.getByTestId("wallet-send").click();
       await expect(p2.getByTestId("wallet-pay")).toContainText("Transaction failed in your wallet");
       await shot(p2, "03-tx-failed");
@@ -89,7 +90,7 @@ for (const [w, h] of WIDTHS) {
       await p3.goto(mock.url(s3));
       await p3.getByTestId("path-wallet").click();
       await p3.getByTestId("sol-wallet-mock-phantom").click();
-      await p3.getByTestId(`option-route_quote-${SPL}`).click();
+      await choose(p3, "route_quote", SPL);
       await expect(p3.getByTestId("solana-manual-only")).toBeVisible();
       await shot(p3, "04-solana-manual-only");
       await p3.close();
@@ -99,7 +100,7 @@ for (const [w, h] of WIDTHS) {
       const s = mock.create({ livemode: true }, { options: OPTIONS, attestToken: SPL_TOKEN, autoSucceed: false });
       await page.goto(mock.url(s));
       await page.getByTestId("path-manual").click();
-      await page.getByTestId(`option-route_quote-${SPL}`).click();
+      await choose(page, "route_quote", SPL);
       await page.getByTestId("refund-address").fill(SOL_PAYER);
       await page.getByTestId("continue").click();
       await page.getByTestId("confirm-network").check();
@@ -117,7 +118,7 @@ for (const [w, h] of WIDTHS) {
       );
       await page.goto(mock.url(b));
       await page.getByTestId("path-manual").click();
-      await page.getByTestId("option-route_quote-nep141:btc.omft.near").click();
+      await choose(page, "route_quote", "nep141:btc.omft.near");
       await page.getByTestId("refund-address").fill("bc1pzkakv8d86xwnrvzx262umfvz04dxjeegc4lez8aqdlx50zjfsr5qrjf5pr");
       await page.getByTestId("continue").click();
       await page.getByTestId("confirm-network").check();

@@ -7,6 +7,8 @@ import { USDC_BASE } from "../support/sessions";
 import { expect, test } from "./support/fixtures";
 import { MerchantSite } from "./support/merchant";
 import type { MockNearPay, MockSession } from "./support/mock-server";
+import { MANY, RICH } from "./support/options";
+import { choose, openPicker } from "./support/pay";
 import { injectEvmWallet } from "./support/wallets";
 
 const DIR = process.env.NP_SHOTS ?? "";
@@ -27,7 +29,7 @@ async function shot(page: Page, name: string) {
 async function manualTo(page: Page, mock: MockNearPay, s: MockSession, reveal = true) {
   await page.goto(mock.url(s));
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill(REFUND);
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("manual-instructions")).toBeVisible();
@@ -50,18 +52,42 @@ for (const [w, h] of WIDTHS) {
       await page.getByTestId("evm-wallet-test.mockwallet").click();
       await expect(page.getByTestId("asset-picker")).toBeVisible();
       await shot(page, "03-pay-with");
-      await page.getByTestId("network-filter").click();
+      await openPicker(page, "network-picker");
       await shot(page, "04-choose-network");
-      await page.getByTestId("network-apply").click();
-      await page.getByTestId("asset-search").fill("DOGE on Base");
+      await page.keyboard.type("DOGE");
       await shot(page, "05-no-matching-options");
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
       const m = mock.create();
       await page.goto(mock.url(m));
       await page.getByTestId("path-manual").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await page.getByTestId("refund-address").fill("0x5290");
       await page.getByTestId("refund-address").blur();
       await shot(page, "06-send-from-another-wallet");
+    });
+
+    test("pay step: network open, token balances, gas warning", async ({ page, mock }) => {
+      await injectEvmWallet(page, { chainId: "0x2105", reads: { ...RICH, native: "0x0" } });
+      const s = mock.create({ livemode: true }, { options: MANY });
+      await page.goto(mock.url(s));
+      await page.getByTestId("path-wallet").click();
+      await page.getByTestId("evm-wallet-test.mockwallet").click();
+      await expect(page.getByTestId("token-picker-trigger")).toContainText("Balance 12.34");
+      await shot(page, "40-pay-step");
+      await openPicker(page, "network-picker");
+      await shot(page, "41-network-open");
+      await page.keyboard.press("Escape");
+      await openPicker(page, "token-picker");
+      await shot(page, "42-token-open-balances");
+      await page.keyboard.press("Escape");
+      await page.getByTestId("asset-continue").click();
+      await expect(page.getByTestId("gas-warning")).toBeVisible();
+      await shot(page, "43-gas-warning");
+      await page.getByTestId("gas-manual").click();
+      await page.getByTestId("asset-continue").click();
+      await page.getByTestId("refund-why").locator("summary").click();
+      await shot(page, "44-refund-form-explainer");
     });
 
     test("review, approve, dark, test mode, payment details", async ({ page, mock }) => {
@@ -70,7 +96,7 @@ for (const [w, h] of WIDTHS) {
       await page.goto(mock.url(s));
       await page.getByTestId("path-wallet").click();
       await page.getByTestId("evm-wallet-test.mockwallet").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await expect(page.getByTestId("wallet-send")).toBeVisible();
       await shot(page, "07-review");
       await page.getByTestId("payment-details").click();
@@ -83,7 +109,7 @@ for (const [w, h] of WIDTHS) {
       await page.goto(mock.url(d));
       await page.getByTestId("path-wallet").click();
       await page.getByTestId("evm-wallet-test.mockwallet").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await expect(page.getByTestId("wallet-send")).toBeVisible();
       await shot(page, "10-review-dark");
       await page.emulateMedia({ colorScheme: "light" });
@@ -91,7 +117,7 @@ for (const [w, h] of WIDTHS) {
       await page.goto(mock.url(tm));
       await page.getByTestId("path-wallet").click();
       await page.getByTestId("evm-wallet-test.mockwallet").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await expect(page.getByTestId("simulate")).toBeVisible();
       await shot(page, "11-test-mode-try-a-payment");
     });
@@ -100,7 +126,7 @@ for (const [w, h] of WIDTHS) {
       const v = mock.create({}, { attestDelayMs: 4000 });
       await page.goto(mock.url(v));
       await page.getByTestId("path-manual").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await page.getByTestId("refund-address").fill(REFUND);
       await page.getByTestId("continue").click();
       await expect(page.getByTestId("verifying")).toBeVisible();
@@ -108,7 +134,7 @@ for (const [w, h] of WIDTHS) {
       const f = mock.create({}, { sentinel: "tamper_address" });
       await page.goto(mock.url(f));
       await page.getByTestId("path-manual").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await page.getByTestId("refund-address").fill(REFUND);
       await page.getByTestId("continue").click();
       await expect(page.getByTestId("verify-failed")).toBeVisible();
@@ -157,6 +183,7 @@ for (const [w, h] of WIDTHS) {
       const q = mock.create();
       await manualTo(page, mock, q);
       await page.getByTestId("sent").click();
+      await expect(page.getByTestId("processing")).toBeVisible(); // the signal landed before the status changes
       mock.setAttempt(q, { status: "expired_unpaid", attestation_ticket: null });
       await expect(page.getByTestId("quote-expired")).toBeVisible();
       await shot(page, "24-quote-expired");
@@ -195,7 +222,7 @@ for (const [w, h] of WIDTHS) {
       await expect(page.getByTestId("choose-path")).toBeVisible();
       await shot(page, "31-invoice-pay-start");
       await page.getByTestId("path-manual").click();
-      await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+      await choose(page, "route_quote", USDC_BASE);
       await page.getByTestId("refund-address").fill(REFUND);
       await page.getByTestId("continue").click();
       await expect(page.getByTestId("manual-instructions")).toBeVisible();

@@ -1,38 +1,79 @@
 /**
- * "Pay with" (choose_asset): search, "All networks" filter → "Choose a network", the options available
- * for this payment, and the "No matching payment options" state. Tapping an option continues: the wallet
- * path prepares the payment (attempt + sentinel verification → review), the manual path opens
- * "Send from another wallet".
+ * "Pay with" (choose_asset): a network dropdown and a token dropdown (side by side from 640 px), the
+ * indicative amount of the chosen option and Continue. Both dropdowns search inside their own panel
+ * and scroll inside it, so the screen stays about one viewport tall however many routes exist.
+ *
+ * With a wallet connected (live mode) the token list shows only the tokens that wallet holds on the
+ * chosen network, with their balance, by value; tokens below this payment's indicative amount are
+ * listed as "Not enough". "Show all tokens" lists every token (to pay from another wallet or an
+ * exchange). Without a wallet (manual path, QR) or when balances can't be read, the full list shows.
+ * Continue: the wallet path prepares the payment (attempt + sentinel verification → review), the
+ * manual path opens "Send from another wallet".
  */
-import {
-  Button,
-  ChevronDownIcon,
-  Combobox,
-  LiveRegion,
-  Money,
-  SearchInput,
-  Skeleton,
-  StatusBadge,
-} from "@nearpay-internal/ui";
-import { useMemo, useState } from "react";
+import { Button, formatMoney, Skeleton, StatusBadge } from "@nearpay-internal/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectedWallet, Option } from "../../app/machine";
+import type { WalletReads } from "../../app/useCheckout";
+import { chainName } from "../../lib/chains/chains";
 import { hasMessage, t } from "../../lib/i18n/t";
-import { OptionButton, ScreenTitle } from "../../ui/blocks";
+import { ScreenTitle } from "../../ui/blocks";
+import { Picker, type PickerItem } from "../../ui/Picker";
 import { shortAddress } from "../wallet-connect/wallets";
-import { filterOptions, networksOf, optionKey, optionTitle } from "./options";
+import { networkKey, networksOf, optionKey, optionNetwork } from "./options";
+import { type BalanceRead, formatBalance, rowSelectable, type TokenRow, tokenRows } from "./tokens";
 
-function OptionDescription({ o }: { o: Option }) {
-  if (!o.available) {
-    const key = `asset.unavailable.${o.reason ?? "route_unavailable"}`;
-    return <>{hasMessage(key) ? t(key) : t("asset.unavailable.route_unavailable")}</>;
-  }
+/** Balance reads that take longer fall back to the full list. */
+export const BALANCE_TIMEOUT_MS = 8000;
+/** More networks than this get group headings (popular first). */
+const GROUP_AFTER = 6;
+const POPULAR = 4;
+
+type Balance = { readonly state: "loading" } | { readonly state: "error" } | BalanceRead;
+
+const estimateText = (o: Option): string | null =>
+  o.estimated_amount_in ? formatMoney({ amount: o.estimated_amount_in, decimals: o.decimals, symbol: o.symbol }) : null;
+
+function unavailableText(o: Option): string {
+  const key = `asset.unavailable.${o.reason ?? "route_unavailable"}`;
+  return hasMessage(key) ? t(key) : t("asset.unavailable.route_unavailable");
+}
+
+function rowDescription(r: TokenRow): string {
+  const o = r.option;
+  if (!o.available) return unavailableText(o);
+  const est = estimateText(o);
   const prefix = o.method === "intents_transfer" ? `${t("asset.intents")} · ` : "";
-  if (!o.estimated_amount_in) return <>{`${prefix}${t("asset.estimateUnknown")}`}</>;
-  return (
-    <>
-      {prefix}≈ <Money amount={o.estimated_amount_in} decimals={o.decimals} symbol={o.symbol} /> · includes fees
-    </>
-  );
+  if (r.short && est) return `${t("asset.notEnough")} · ${t("asset.needed", { amount: est })}`;
+  return `${prefix}${est ? t("asset.estimate", { amount: `≈ ${est}` }) : t("asset.estimateUnknown")}`;
+}
+
+function tokenItem(r: TokenRow, network: string): PickerItem {
+  const o = r.option;
+  return {
+    value: optionKey(o),
+    label: r.balance !== null ? `${o.symbol} · ${formatBalance(r.balance, o.decimals)}` : o.symbol,
+    triggerLabel: o.symbol,
+    avatar: o.symbol,
+    description: rowDescription(r),
+    keywords: [network, o.chain],
+    disabled: !rowSelectable(r),
+    testId: `option-${o.method}-${o.origin_asset_id}`,
+  };
+}
+
+export interface PayWithProps {
+  options: readonly Option[] | null;
+  wallet: ConnectedWallet | null;
+  /** Option being prepared (Continue shows a spinner). */
+  pendingKey: string | null;
+  busy: boolean;
+  onPick: (o: Option) => void;
+  /** The human check has not produced a token yet for the pending option. */
+  needsChallenge: boolean;
+  /** Wallet balance reads (wallet path, live mode); null → full lists, no balances. */
+  walletReads: WalletReads | null;
+  /** Option to preselect (e.g. the same token after "Pay from another wallet or exchange"). */
+  preferKey?: string | null;
 }
 
 export function PayWith({
@@ -42,39 +83,108 @@ export function PayWith({
   busy,
   onPick,
   needsChallenge,
-}: {
-  options: readonly Option[] | null;
-  wallet: ConnectedWallet | null;
-  /** Option being prepared (spinner on its row). */
-  pendingKey: string | null;
-  busy: boolean;
-  onPick: (o: Option) => void;
-  /** The human check has not produced a token yet for the pending option. */
-  needsChallenge: boolean;
-}) {
-  const [query, setQuery] = useState("");
+  walletReads,
+  preferKey = null,
+}: PayWithProps) {
+  const all = useMemo(() => options ?? [], [options]);
+  const networks = useMemo(() => networksOf(all), [all]);
+  const prefer = preferKey ? (all.find((o) => optionKey(o) === preferKey && o.available) ?? null) : null;
+  const firstUsable = all.find((o) => o.available) ?? null;
   const [network, setNetwork] = useState<string | null>(null);
-  const [picking, setPicking] = useState(false);
-  const networks = useMemo(() => networksOf(options ?? []), [options]);
-  const visible = useMemo(() => filterOptions(options ?? [], query, network), [options, query, network]);
-  const networkLabel =
-    network === null ? t("asset.allNetworks") : (networks.find((n) => n.key === network)?.label ?? network);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
+  const [balance, setBalance] = useState<Balance | null>(null);
+  const [readRun, setReadRun] = useState(0);
+  const cache = useRef(new Map<string, BalanceRead>());
 
-  if (picking) {
-    return (
-      <ChooseNetwork
-        networks={networks}
-        value={network}
-        onApply={(n) => {
-          setNetwork(n);
-          setPicking(false);
-        }}
-      />
+  const net =
+    network !== null && networks.some((n) => n.key === network)
+      ? network
+      : prefer
+        ? networkKey(prefer)
+        : firstUsable
+          ? networkKey(firstUsable)
+          : (networks[0]?.key ?? null);
+  const netOptions = useMemo(() => all.filter((o) => networkKey(o) === net), [all, net]);
+  const netLabel = networks.find((n) => n.key === net)?.label ?? "";
+
+  // ---- wallet balances of the chosen network (cached per network) --------------------------------------
+  useEffect(() => {
+    void readRun; // re-read after a chain switch
+    if (!walletReads || !net || netOptions.length === 0) {
+      setBalance(null);
+      return;
+    }
+    const hit = cache.current.get(net);
+    if (hit) {
+      setBalance(hit);
+      return;
+    }
+    let cancelled = false;
+    setBalance({ state: "loading" });
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("timeout")), BALANCE_TIMEOUT_MS),
     );
-  }
+    Promise.race([walletReads.balances(netOptions), timeout])
+      .then((r) => {
+        if (cancelled) return;
+        if (r.state === "ok") cache.current.set(net, r);
+        setBalance(r);
+      })
+      .catch(() => !cancelled && setBalance({ state: "error" }));
+    return () => {
+      cancelled = true;
+    };
+  }, [walletReads, net, netOptions, readRun]);
+
+  const held = balance?.state === "ok" ? balance.balances : null;
+  const rows = useMemo(() => tokenRows(netOptions, held, showAll), [netOptions, held, showAll]);
+  const selectable = rows.filter(rowSelectable);
+  const tokenKey =
+    picked !== null && selectable.some((r) => optionKey(r.option) === picked)
+      ? picked
+      : prefer && selectable.some((r) => optionKey(r.option) === preferKey)
+        ? preferKey
+        : selectable[0]
+          ? optionKey(selectable[0].option)
+          : null;
+  const selectedRow = rows.find((r) => optionKey(r.option) === tokenKey) ?? null;
+  const selected = selectedRow?.option ?? null;
+  const loadingBalances = balance?.state === "loading";
+
+  // ---- items --------------------------------------------------------------------------------------------
+  const networkItems = useMemo<PickerItem[]>(() => {
+    const grouped = networks.length > GROUP_AFTER;
+    let usable = 0;
+    return networks.map((n) => {
+      const opts = all.filter((o) => networkKey(o) === n.key);
+      const available = opts.some((o) => o.available);
+      const symbols = [...new Set(opts.map((o) => o.symbol))];
+      if (available) usable += 1;
+      return {
+        value: n.key,
+        label: n.label,
+        description: available ? symbols.join(", ") : unavailableText(opts[0] as Option),
+        keywords: [...symbols, n.key],
+        disabled: !available,
+        group: grouped
+          ? !available
+            ? t("network.unavailable")
+            : usable <= POPULAR
+              ? t("network.popular")
+              : t("network.more")
+          : undefined,
+        testId: `network-${n.key}`,
+      };
+    });
+  }, [networks, all]);
+  const tokenItems = useMemo(() => rows.map((r) => tokenItem(r, netLabel)), [rows, netLabel]);
+
+  const chainOf = balance?.state === "wrong_chain" ? balance.chain : null;
+  const estimate = selected ? estimateText(selected) : null;
 
   return (
-    <section className="ck-screen" data-testid="asset-picker" aria-labelledby="ck-paywith-title">
+    <section className="ck-screen ck-paywith" data-testid="asset-picker" aria-labelledby="ck-paywith-title">
       {wallet ? (
         <p className="ck-connected" data-testid="connected-wallet">
           <StatusBadge tone="success">{t("wallet.connected")}</StatusBadge>
@@ -84,120 +194,126 @@ export function PayWith({
         </p>
       ) : null}
       <ScreenTitle id="ck-paywith-title" title={t("asset.title")} />
-      <div className="np-stack">
-        <SearchInput
-          aria-label={t("asset.search")}
-          placeholder={t("asset.search")}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          data-testid="asset-search"
-        />
-        <button
-          type="button"
-          className="ck-filter"
-          onClick={() => setPicking(true)}
-          aria-label={t("asset.networkFilter", { network: networkLabel })}
-          data-testid="network-filter"
-        >
-          <span>{networkLabel}</span>
-          <ChevronDownIcon size={20} />
-        </button>
-      </div>
       {options === null ? (
-        <div className="np-stack" aria-busy="true">
+        <div className="ck-pickers" aria-busy="true" data-testid="options-loading">
           <p className="np-sr-only" role="status">
             {t("asset.loading")}
           </p>
           <Skeleton shape="block" />
           <Skeleton shape="block" />
-          <Skeleton shape="block" />
-        </div>
-      ) : visible.length > 0 ? (
-        <div className="np-stack">
-          <p className="np-option-group__label" id="ck-available">
-            {t("asset.available")}
-          </p>
-          <ul className="ck-list" aria-labelledby="ck-available">
-            {visible.map((o) => {
-              const key = optionKey(o);
-              return (
-                <li key={key}>
-                  <OptionButton
-                    avatar={o.symbol}
-                    title={optionTitle(o)}
-                    description={<OptionDescription o={o} />}
-                    disabled={!o.available || (busy && pendingKey !== key)}
-                    selected={pendingKey === key}
-                    pending={pendingKey === key && busy}
-                    onClick={() => onPick(o)}
-                    testId={`option-${o.method}-${o.origin_asset_id}`}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-          {needsChallenge ? (
-            <p className="np-checkout__note" role="status">
-              {t("asset.checking")}
-            </p>
-          ) : null}
         </div>
       ) : (
-        <div className="np-stack" data-testid="no-match">
-          <h2 className="ck-subtitle">{t("asset.noMatch")}</h2>
-          <p className="np-checkout__lede">{t("asset.noMatchBody")}</p>
-          <Button
-            fullWidth
-            variant="secondary"
-            onClick={() => {
-              setQuery("");
-              setNetwork(null);
+        <div className="ck-pickers">
+          <Picker
+            label={t("asset.network")}
+            items={networkItems}
+            value={net}
+            onChange={(v) => {
+              setNetwork(v);
+              setPicked(null);
+              setShowAll(false);
             }}
-          >
-            {t("asset.clearFilters")}
-          </Button>
+            placeholder={t("asset.networkPlaceholder")}
+            searchLabel={t("network.search")}
+            empty={t("network.none")}
+            countLabel={(n) => (n === 1 ? t("network.countOne") : t("network.count", { count: n }))}
+            closeLabel={t("asset.closeList")}
+            disabled={busy}
+            testId="network-picker"
+          />
+          <Picker
+            label={t("asset.token")}
+            items={tokenItems}
+            value={tokenKey}
+            onChange={setPicked}
+            triggerDescription={
+              selectedRow?.balance != null && selected
+                ? t("asset.balance", { amount: formatBalance(selectedRow.balance, selected.decimals) })
+                : undefined
+            }
+            placeholder={t("asset.tokenPlaceholder")}
+            searchLabel={t("asset.tokenSearch")}
+            empty={
+              held && !showAll && rows.length === 0 ? t("asset.noHeld", { network: netLabel }) : t("asset.tokenNone")
+            }
+            loading={loadingBalances}
+            loadingLabel={t("asset.balancesLoading")}
+            footer={
+              held ? (
+                <button
+                  type="button"
+                  className="np-link-button ck-picker__toggle"
+                  aria-pressed={showAll}
+                  onClick={() => setShowAll((v) => !v)}
+                  data-testid="show-all-tokens"
+                >
+                  {showAll ? t("asset.showHeld") : t("asset.showAll")}
+                </button>
+              ) : undefined
+            }
+            countLabel={(n) => (n === 1 ? t("asset.countOne") : t("asset.count", { count: n }))}
+            closeLabel={t("asset.closeList")}
+            disabled={busy}
+            testId="token-picker"
+          />
         </div>
       )}
-      <LiveRegion>
-        {options && (query || network)
-          ? visible.length === 1
-            ? t("asset.countOne")
-            : t("asset.count", { count: visible.length })
-          : ""}
-      </LiveRegion>
-    </section>
-  );
-}
-
-function ChooseNetwork({
-  networks,
-  value,
-  onApply,
-}: {
-  networks: readonly { key: string; label: string }[];
-  value: string | null;
-  onApply: (network: string | null) => void;
-}) {
-  const [draft, setDraft] = useState<string>(value ?? "all");
-  const items = [
-    { value: "all", label: t("asset.allNetworks") },
-    ...networks.map((n) => ({ value: n.key, label: n.label })),
-  ];
-  return (
-    <section className="ck-screen" data-testid="choose-network" aria-labelledby="ck-network-title">
-      <ScreenTitle id="ck-network-title" title={t("network.title")} />
-      <Combobox
-        label={t("network.search")}
-        placeholder={t("network.search")}
-        options={items}
-        value={draft}
-        onChange={setDraft}
-        variant="rows"
-        empty={t("network.none")}
-      />
-      <Button fullWidth onClick={() => onApply(draft === "all" ? null : draft)} data-testid="network-apply">
-        {t("network.apply")}
-      </Button>
+      {loadingBalances ? (
+        <p className="np-checkout__note" role="status" data-testid="balances-loading">
+          {t("asset.balancesLoading")}
+        </p>
+      ) : balance?.state === "error" ? (
+        <p className="np-checkout__note" role="status" data-testid="balances-error">
+          {t("asset.balancesError")}
+        </p>
+      ) : chainOf && walletReads ? (
+        <p className="np-checkout__note ck-inline-action" data-testid="balances-wrong-chain">
+          <span>{t("asset.wrongChain", { network: chainName(chainOf) })}</span>
+          <button
+            type="button"
+            className="np-link-button"
+            onClick={() => {
+              void walletReads
+                .switchChain(chainOf)
+                .then(() => setReadRun((n) => n + 1))
+                .catch(() => undefined);
+            }}
+            data-testid="switch-chain"
+          >
+            {t("asset.switchChain", { network: chainName(chainOf) })}
+          </button>
+        </p>
+      ) : held && !showAll && rows.length === 0 ? (
+        <p className="np-checkout__note ck-inline-action" role="status" data-testid="no-held-tokens">
+          <span>{t("asset.noHeld", { network: netLabel })}</span>
+          <button type="button" className="np-link-button" onClick={() => setShowAll(true)}>
+            {t("asset.showAll")}
+          </button>
+        </p>
+      ) : null}
+      {selected && estimate ? (
+        <p className="np-checkout__note" data-testid="selected-estimate">
+          {selected.method === "intents_transfer" ? `${t("asset.intents")}. ` : ""}
+          {t("asset.summary", { amount: estimate, network: optionNetwork(selected) })}
+        </p>
+      ) : null}
+      <div className="np-stack np-stack--sm">
+        <Button
+          fullWidth
+          disabled={!selected || busy || loadingBalances}
+          loading={selected !== null && pendingKey === optionKey(selected) && (busy || needsChallenge)}
+          loadingText={t("verify.button")}
+          onClick={() => selected && onPick(selected)}
+          data-testid="asset-continue"
+        >
+          {t("asset.continue")}
+        </Button>
+        {needsChallenge ? (
+          <p className="np-checkout__note" role="status">
+            {t("asset.checking")}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }

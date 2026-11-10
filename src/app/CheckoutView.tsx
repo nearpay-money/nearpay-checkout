@@ -4,11 +4,10 @@
  * frame (merchant, amount hero, desktop summary, test-mode banner, back) and the per-screen UI state
  * (search, refund address, Turnstile token, the "still confirming" timer).
  */
-import { Callout, CheckoutFrame, KeyValueList, Money } from "@nearpay-internal/ui";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { Callout, CheckoutFrame, KeyValueList, Money, Skeleton } from "@nearpay-internal/ui";
+import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { webLinks } from "../config";
 import { optionKey } from "../features/asset-picker/options";
-import { PayWith } from "../features/asset-picker/PayWith";
 import { ManualInstructions } from "../features/deposit-instructions/ManualInstructions";
 import { TrustRow } from "../features/deposit-instructions/PaymentDetails";
 import { WalletPay } from "../features/deposit-instructions/WalletPay";
@@ -34,6 +33,23 @@ import {
 } from "./StatusScreens";
 import { canGoBack, INSUFFICIENT_FUNDS, type ScreenId, screenFor } from "./screens";
 import type { Checkout } from "./useCheckout";
+
+/**
+ * "Pay with" (network + token dropdowns, balance logic) is a lazy chunk (§7 initial-JS budget): it is
+ * never the first screen, and it is prefetched while "Pay your way" / "Connect a wallet" show.
+ */
+const loadPayWith = () => import("../features/asset-picker/PayWith");
+const PayWith = lazy(() => loadPayWith().then((m) => ({ default: m.PayWith })));
+
+function PayWithFallback() {
+  return (
+    <div className="np-stack" aria-busy="true" data-testid="pay-with-loading">
+      <Skeleton shape="title" />
+      <Skeleton shape="block" />
+      <Skeleton shape="block" />
+    </div>
+  );
+}
 
 /** "Still confirming" after this long in `processing` with a detected deposit. */
 export const SLOW_AFTER_MS = 120_000;
@@ -84,6 +100,7 @@ export function CheckoutView({
   renderBlocked,
 }: CheckoutViewProps) {
   const { state, actions, busy } = c;
+  const switchToManual = actions.useManual;
   const wide = useMediaQuery("(min-width: 880px)");
   const vm = useMemo(() => buildModel(c), [c]);
   const [refund, setRefund] = useState("");
@@ -91,8 +108,16 @@ export function CheckoutView({
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [slow, setSlow] = useState(false);
+  /** Token to preselect on the manual path after "Pay from another wallet or exchange" (fee warning). */
+  const [preferKey, setPreferKey] = useState<string | null>(null);
 
-  const screen = screenFor(state, { manualForm, busy, slow, totalChanged: c.previousTotal !== null });
+  // The network-fee pre-check runs while `busy` but before any wallet prompt: stay on the review.
+  const screen = screenFor(state, {
+    manualForm,
+    busy: busy && !c.preparing,
+    slow,
+    totalChanged: c.previousTotal !== null,
+  });
 
   // ---- wallet path: tapping an option prepares the payment once the human check has a token ----------
   const { phase, path, option, error } = state;
@@ -123,6 +148,11 @@ export function CheckoutView({
       setPendingKey(key);
     }
   }, [phase, c.requoteKey, state.options, select]);
+
+  // Prefetch the "Pay with" chunk before it is needed.
+  useEffect(() => {
+    if (screen === "start" || screen === "connect_wallet") void loadPayWith().catch(() => undefined);
+  }, [screen]);
 
   // ---- "Still confirming" ---------------------------------------------------------------------------
   const confirmingScreen = screen === "confirming" || screen === "still_confirming";
@@ -185,18 +215,23 @@ export function CheckoutView({
         return <WalletConnect onConnected={actions.connected} onCancel={actions.back} onManual={actions.useManual} />;
       case "pay_with":
         return (
-          <PayWith
-            options={state.options}
-            wallet={state.wallet}
-            pendingKey={pendingKey}
-            busy={busy}
-            needsChallenge={pendingKey !== null && token === null && !busy}
-            onPick={(o) => {
-              actions.selectOption(o);
-              if (state.path === "manual") setManualForm(true);
-              else setPendingKey(optionKey(o));
-            }}
-          />
+          <Suspense fallback={<PayWithFallback />}>
+            <PayWith
+              options={state.options}
+              wallet={state.wallet}
+              pendingKey={pendingKey}
+              busy={busy}
+              needsChallenge={pendingKey !== null && token === null && !busy}
+              walletReads={c.walletReads}
+              preferKey={preferKey}
+              onPick={(o) => {
+                setPreferKey(null);
+                actions.selectOption(o);
+                if (state.path === "manual") setManualForm(true);
+                else setPendingKey(optionKey(o));
+              }}
+            />
+          </Suspense>
         );
       case "no_options":
         return <NoOptionsScreen c={c} vm={vm} />;
@@ -228,7 +263,18 @@ export function CheckoutView({
       case "not_approved":
       case "not_enough_funds":
       case "tx_failed":
-        return <WalletPay c={c} vm={vm} screen={screen} wide={wide && mode === "hosted"} />;
+        return (
+          <WalletPay
+            c={c}
+            vm={vm}
+            screen={screen}
+            wide={wide && mode === "hosted"}
+            onManual={() => {
+              setPreferKey(state.option ? optionKey(state.option) : null);
+              switchToManual();
+            }}
+          />
+        );
       case "send_manual":
       case "received_less":
         return <ManualInstructions c={c} vm={vm} topUp={screen === "received_less"} />;

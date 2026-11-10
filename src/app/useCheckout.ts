@@ -15,13 +15,15 @@ import {
   submitDepositTx,
   submitSignedIntent,
 } from "@nearpay/spec";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { config } from "../config";
 import { optionKey, payableOptions } from "../features/asset-picker/options";
+import type { BalanceRead } from "../features/asset-picker/tokens";
+import type { GasVerdict } from "../features/gas-check/gas";
 import { openStatusStream } from "../features/status-stream/stream";
 import type { WalletHandle } from "../features/wallet-connect/wallets";
 import { call, isApiError } from "../lib/api/client";
-import { NEAR_MAINNET, walletAsset } from "../lib/chains/chains";
+import { getChain, NEAR_MAINNET, type WalletAsset, walletAsset } from "../lib/chains/chains";
 import { type VerifiedInstructions, verifyAttestation } from "../lib/integrity/verify";
 import { type AssetMeta, assetMeta, paidAssetId, totalToSend, walletTokenHint } from "../lib/money/display";
 import { ensureChain, personalSign, sendTransaction, WalletRejected } from "../wallets/evm/provider";
@@ -35,7 +37,7 @@ import {
   SANDBOX_SALT,
 } from "../wallets/intents/message";
 import { currentSalt, storageBalanceBounds, storageBalanceOf } from "../wallets/near/rpc";
-import { depositTxHash, nearDepositTransactions } from "../wallets/near/tx";
+import { depositTxHash, type NearTransaction, nearDepositTransactions } from "../wallets/near/tx";
 import { accountOwner, latestBlockhash, type MintProgram, mintProgram, tokenAccountRent } from "../wallets/solana/rpc";
 import {
   associatedTokenAddress,
@@ -105,7 +107,43 @@ export interface Checkout {
   readonly solana: SolanaPrep | null;
   /** Re-run the Solana checks after an RPC error. */
   readonly retrySolana: () => void;
+  /**
+   * Balance reads of the connected wallet for the token picker (wallet path, live mode only — test
+   * sessions make no wallet or RPC reads, §11.1); null otherwise.
+   */
+  readonly walletReads: WalletReads | null;
+  /** Network-fee pre-check of the wallet payment on the review screen (live route quotes). */
+  readonly gas: GasState | null;
+  /** The pre-check runs right before the wallet is asked to sign (Pay shows "Checking…", no wallet prompt). */
+  readonly preparing: boolean;
+  /** "Check again" after adding funds for the network fee. */
+  readonly retryGas: () => void;
 }
+
+export interface WalletReads {
+  readonly family: "evm" | "near" | "solana";
+  /** Balances (base units by option key) of these options — one network's — for the connected wallet. */
+  balances(options: readonly Option[]): Promise<BalanceRead>;
+  /** EVM: ask the wallet to switch to `chain` (so its provider can read balances there). */
+  switchChain(chain: string): Promise<void>;
+}
+
+/**
+ * `short`: the wallet holds enough to send but not the network fee — `need` (native base units,
+ * rounded up for display by the screen) of `symbol` on `chain`; `native` when the payment itself is
+ * in the native coin (the fee comes on top of the amount).
+ */
+export type GasState =
+  | { readonly state: "checking" }
+  | { readonly state: "ok" }
+  | {
+      readonly state: "short";
+      readonly need: string;
+      readonly symbol: string;
+      readonly decimals: number;
+      readonly chain: string;
+      readonly native: boolean;
+    };
 
 /**
  * Solana wallet path after verification (§11): `checking` (RPC: mint owner, deposit token account),
@@ -361,6 +399,108 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     };
   }, [solanaWallet, verified, livemode, solanaRun]);
 
+  // ---- network-fee pre-check (EVM / NEAR / Solana wallet transfers) ------------------------------------
+  const [gas, setGas] = useState<GasState | null>(null);
+  const [gasRun, setGasRun] = useState(0);
+  const [preparing, setPreparing] = useState(false);
+  const routeAttestation = verified?.attestation.kind === "route_quote" ? verified.attestation : null;
+  const walletFamily = state.wallet?.family ?? null;
+  const payingWallet = state.phase === "pay_wallet" && livemode && routeAttestation !== null && walletFamily !== null;
+  const solanaReady = solana?.state === "ready" ? solana : null;
+
+  /** Applies a verdict: true when the wallet must not be opened (short on funds or on the fee). */
+  const applyGas = useCallback((v: GasVerdict, nativeOf: { chain: string; native: boolean }): boolean => {
+    if (v.ok) {
+      setGas({ state: "ok" });
+      return false;
+    }
+    if (v.reason === "funds") {
+      setGas(null);
+      dispatch({ type: "error", error: { code: INSUFFICIENT_FUNDS } });
+      return true;
+    }
+    const info = getChain(nativeOf.chain);
+    setGas({
+      state: "short",
+      need: v.need.toString(),
+      symbol: info?.nativeSymbol ?? "",
+      decimals: info?.nativeDecimals ?? 0,
+      chain: nativeOf.chain,
+      native: nativeOf.native,
+    });
+    return true;
+  }, []);
+
+  /**
+   * Runs the pre-check for the verified route quote; null when it can't run here (EVM wallet on another
+   * chain before the switch, no wallet recipe) — the wallet is then asked as before.
+   */
+  const gasVerdict = useCallback(
+    async (allowChainMismatch: boolean): Promise<{ v: GasVerdict; chain: string; native: boolean } | null> => {
+      const w = wallet.current;
+      const att = verified?.attestation;
+      if (!w || !att || att.kind !== "route_quote" || !att.deposit) return null;
+      const d = att.deposit;
+      const m = await import("../features/gas-check/gas");
+      if (w.family === "solana") {
+        if (!solanaReady) return null;
+        const v = await m.checkSolana(config.solanaRpcUrl, w.address, solanaReady.recipe, solanaReady.rentLamports);
+        return { v, chain: d.chain, native: solanaReady.recipe.kind === "sol" };
+      }
+      const asset = walletAsset(
+        d.origin_asset_id,
+        d.chain,
+        walletTokenHint(att, optionFor(state.option, originMeta, d.origin_asset_id, d.chain)?.token),
+      );
+      if (!asset) return null;
+      if (w.family === "evm" && (asset.kind === "evm_erc20" || asset.kind === "evm_native")) {
+        if (!allowChainMismatch) {
+          const { walletChainId } = await import("../wallets/evm/reads");
+          if ((await walletChainId(w.provider)) !== asset.chainId) return null;
+        }
+        const tx = evmPaymentTx(asset, d.address, d.amount_in, w.address);
+        return {
+          v: await m.checkEvm(w.provider, tx, asset, d.amount_in),
+          chain: d.chain,
+          native: asset.kind === "evm_native",
+        };
+      }
+      if (w.family === "near" && (asset.kind === "near_nep141" || asset.kind === "near_wrap")) {
+        const txs = await nearTransactionsFor(asset, d);
+        const token = asset.kind === "near_nep141" ? { token: asset.token, amount: d.amount_in } : null;
+        return {
+          v: await m.checkNear(config.nearRpcUrl, w.address, txs, token),
+          chain: d.chain,
+          native: asset.kind === "near_wrap",
+        };
+      }
+      return null;
+    },
+    [verified, solanaReady, state.option, originMeta],
+  );
+
+  // On the review screen: check as soon as it can run without a wallet prompt.
+  useEffect(() => {
+    void gasRun; // "Check again"
+    if (!payingWallet) {
+      setGas(null);
+      return;
+    }
+    if (walletFamily === "solana" && !solanaReady) return;
+    let cancelled = false;
+    setGas({ state: "checking" });
+    gasVerdict(false)
+      .then((r) => {
+        if (cancelled) return;
+        if (r) applyGas(r.v, r);
+        else setGas(null);
+      })
+      .catch(() => !cancelled && setGas(null)); // fail open: the wallet decides at Pay
+    return () => {
+      cancelled = true;
+    };
+  }, [payingWallet, walletFamily, solanaReady, gasVerdict, applyGas, gasRun]);
+
   // ---- actions ----------------------------------------------------------------------------------------
   const reload = useCallback(async () => {
     try {
@@ -420,6 +560,18 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     if (!a.livemode) return; // INV-8: test mode never broadcasts; the UI offers "Simulate payment".
     setBusy(true);
     dispatch({ type: "error", error: null });
+    /** Network-fee pre-check right before signing; true = stop before the wallet opens. Fails open. */
+    const preflight = async (): Promise<boolean> => {
+      setPreparing(true);
+      try {
+        const r = await gasVerdict(true);
+        return r ? applyGas(r.v, r) : false;
+      } catch {
+        return false;
+      } finally {
+        setPreparing(false);
+      }
+    };
     try {
       const att = v.attestation;
       if (w.family === "solana") {
@@ -429,6 +581,7 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
         if (solana?.state !== "ready" || !fresh?.ok || !sameRecipe(fresh.recipe, solana.recipe)) {
           throw new Error("This payment can't be sent from a Solana wallet.");
         }
+        if (await preflight()) return;
         const blockhash = await latestBlockhash(config.solanaRpcUrl);
         const tx = solanaPaymentTransaction(solana.recipe, w.address, blockhash);
         const signature = await w.wallet.signAndSendTransaction(tx);
@@ -449,20 +602,11 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
         let txHash: string;
         if (w.family === "evm" && (asset.kind === "evm_erc20" || asset.kind === "evm_native")) {
           await ensureChain(w.provider, d.chain);
+          if (await preflight()) return;
           txHash = await sendTransaction(w.provider, evmPaymentTx(asset, d.address, d.amount_in, w.address));
         } else if (w.family === "near" && (asset.kind === "near_nep141" || asset.kind === "near_wrap")) {
-          const [registered, bounds] = await Promise.all([
-            storageBalanceOf(config.nearRpcUrl, asset.token, d.address),
-            storageBalanceBounds(config.nearRpcUrl, asset.token),
-          ]);
-          const txs = nearDepositTransactions({
-            asset,
-            depositAddress: d.address,
-            amountIn: d.amount_in,
-            memo: d.memo,
-            registered: registered !== null,
-            storageMin: bounds.min,
-          });
+          const txs = await nearTransactionsFor(asset, d);
+          if (await preflight()) return;
           txHash = depositTxHash(await w.wallet.signAndSendTransactions(txs));
         } else {
           throw new Error("This wallet can't pay this asset.");
@@ -502,7 +646,7 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     } finally {
       setBusy(false);
     }
-  }, [state, sessionId, secret, originMeta, solana]);
+  }, [state, sessionId, secret, originMeta, solana, gasVerdict, applyGas]);
 
   const signalSent = useCallback(async () => {
     const a = state.attempt;
@@ -531,6 +675,24 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       setBusy(false);
     }
   }, [state, sessionId, secret]);
+
+  const connectedFamily = state.wallet?.family ?? null;
+  const walletReads = useMemo<WalletReads | null>(() => {
+    if (state.path !== "wallet" || !connectedFamily || !livemode) return null;
+    return {
+      family: connectedFamily,
+      balances: async (opts) => {
+        const w = wallet.current;
+        if (!w) return { state: "none" };
+        const m = await import("../features/asset-picker/balance-reads");
+        return m.readBalances(w, opts, config);
+      },
+      switchChain: async (chain) => {
+        const w = wallet.current;
+        if (w?.family === "evm") await ensureChain(w.provider, chain);
+      },
+    };
+  }, [state.path, connectedFamily, livemode]);
 
   const actions: CheckoutActions = {
     choosePath: (p) => dispatch({ type: "choose_path", path: p }),
@@ -566,7 +728,10 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
       dispatch({ type: "back" });
     },
     block: (reason) => dispatch({ type: "blocked", reason }),
-    clearError: () => dispatch({ type: "error", error: null }),
+    clearError: () => {
+      dispatch({ type: "error", error: null });
+      setGasRun((n) => n + 1); // "Check again" on Not enough funds re-runs the pre-check
+    },
   };
 
   const attestation = state.verified?.attestation ?? trusted?.attestation ?? null;
@@ -584,7 +749,30 @@ export function useCheckout({ sessionId, secret, enabled = true }: CheckoutParam
     requoteKey,
     solana,
     retrySolana: () => setSolanaRun((n) => n + 1),
+    walletReads,
+    gas: state.phase === "pay_wallet" ? gas : null,
+    preparing,
+    retryGas: () => setGasRun((n) => n + 1),
   };
+}
+
+/** NEAR deposit batch of the attested instructions (storage registration read from the configured RPC). */
+async function nearTransactionsFor(
+  asset: Extract<WalletAsset, { kind: "near_nep141" | "near_wrap" }>,
+  d: { readonly address: string; readonly amount_in: string; readonly memo: string | null },
+): Promise<NearTransaction[]> {
+  const [registered, bounds] = await Promise.all([
+    storageBalanceOf(config.nearRpcUrl, asset.token, d.address),
+    storageBalanceBounds(config.nearRpcUrl, asset.token),
+  ]);
+  return nearDepositTransactions({
+    asset,
+    depositAddress: d.address,
+    amountIn: d.amount_in,
+    memo: d.memo,
+    registered: registered !== null,
+    storageMin: bounds.min,
+  });
 }
 
 /** The payment option describing exactly `assetId` on `chain` (selected one first). */

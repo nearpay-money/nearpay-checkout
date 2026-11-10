@@ -4,13 +4,14 @@ import { USDC_BASE } from "../support/sessions";
 import { a11yBasics } from "./support/a11y";
 import { expect, test } from "./support/fixtures";
 import type { MockInvoice, MockNearPay } from "./support/mock-server";
+import { choose } from "./support/pay";
 
 const REFUND = "0x52908400098527886E0F7030069857D2E4169EE7";
 
 async function payManually(page: Page) {
   await expect(page.getByTestId("choose-path")).toBeVisible();
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill(REFUND);
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("manual-instructions")).toBeVisible();

@@ -10,12 +10,15 @@ import bs58 from "bs58";
 import { solanaPaymentTransaction } from "../../src/wallets/solana/tx";
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay } from "./support/mock-server";
+import { choose } from "./support/pay";
 import { injectSolanaWallet, SOL_PAYER, stubSolanaRpc } from "./support/wallets";
 
 const BTC = "bip122:000000000019d6689c085ae165831e93";
 const SPL = v.spl.asset_id;
 const SOL = v.sol.asset_id;
 const BLOCKHASH = v.inputs.recent_blockhash;
+/** Balance reads (token picker, network-fee pre-check) are left out of the recipe-check assertions. */
+const notBalance = (m: string) => m !== "getBalance" && m !== "getTokenAccountsByOwner";
 
 const option = (asset: string, chain: string, symbol: string, decimals: number, amount: string) => ({
   method: "route_quote",
@@ -59,10 +62,12 @@ test("SPL (live): Wallet Standard wallet signs CreateIdempotent + TransferChecke
   await page.getByTestId("sol-wallet-mock-phantom").click();
   await expect(page.getByTestId("connected-wallet")).toContainText("Mock Phantom");
   // Solana wallets see Solana route quotes only (no Intents transfer, no BTC).
-  await expect(page.getByTestId(`option-route_quote-${SPL}`)).toBeVisible();
-  await expect(page.getByTestId(`option-route_quote-nep141:btc.omft.near`)).toHaveCount(0);
+  await page.getByTestId("network-picker-trigger").click();
+  await expect(page.getByTestId(`network-${SOLANA_MAINNET}`)).toBeVisible();
+  await expect(page.getByTestId(`network-${BTC}`)).toHaveCount(0);
+  await page.keyboard.press("Escape");
   expect(mock.callsTo("listPaymentOptions")[0]?.headers).toBeDefined();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await expect(page.getByTestId("network-fee-note")).toContainText("about 0.00203928 SOL (Solana rent)");
   await page.getByTestId("wallet-send").click();
@@ -80,17 +85,23 @@ test("SPL (live): Wallet Standard wallet signs CreateIdempotent + TransferChecke
   );
   expect(calls[1]?.tx).toEqual(Array.from(expected));
   expect(mock.bodyOf("submitDepositTx")).toEqual({ tx_hash: bs58.encode(new Uint8Array(64).fill(7)) });
-  expect(rpc).toEqual(["getAccountInfo", "getAccountInfo", "getMinimumBalanceForRentExemption", "getLatestBlockhash"]);
+  expect(rpc.filter(notBalance)).toEqual([
+    "getAccountInfo",
+    "getAccountInfo",
+    "getMinimumBalanceForRentExemption",
+    "getLatestBlockhash",
+  ]);
 });
 
 test("SOL (live): one System.Transfer, no token checks", async ({ page, mock }) => {
   await injectSolanaWallet(page);
-  const rpc = await stubSolanaRpc(page);
+  // 2 SOL: covers the 1.5 SOL payment, the fee and the rent-exempt remainder.
+  const rpc = await stubSolanaRpc(page, { balances: { sol: 2_000_000_000 } });
   const s = solSession(mock, true, { attestToken: SOL_TOKEN, attestMeta: { symbol: "SOL", decimals: 9 } });
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SOL}`).click();
+  await choose(page, "route_quote", SOL);
   await expect(page.getByTestId("network-fee-note")).not.toContainText("rent");
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
@@ -104,7 +115,7 @@ test("SOL (live): one System.Transfer, no token checks", async ({ page, mock }) 
       ),
     ),
   );
-  expect(rpc).toEqual(["getLatestBlockhash"]);
+  expect(rpc.filter(notBalance)).toEqual(["getLatestBlockhash"]);
 });
 
 test("Token-2022 mint → manual path only; 'Send from another wallet' opens it", async ({ page, mock }) => {
@@ -114,7 +125,7 @@ test("Token-2022 mint → manual path only; 'Send from another wallet' opens it"
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await expect(page.getByTestId("solana-manual-only")).toContainText("Token-2022");
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   await page.getByTestId("use-manual").click();
@@ -129,14 +140,14 @@ test("a memo or an unreconciled mint → manual path only, the wallet is never a
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await expect(page.getByTestId("solana-manual-only")).toContainText("memo");
 
   const s2 = solSession(mock, true, { attestToken: { standard: "spl", address: SOL_PAYER } });
   await page.goto(mock.url(s2));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await expect(page.getByTestId("solana-manual-only")).toContainText("mint doesn't match");
   expect((await solCalls(page)).filter((c) => c.method === "signAndSendTransaction")).toEqual([]);
 });
@@ -151,7 +162,7 @@ test("rejection → Payment not approved; send error → Transaction failed in y
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await page.getByTestId("wallet-send").click();
   await expect(page.getByTestId("wallet-pay")).toContainText("Payment not approved");
 
@@ -165,7 +176,7 @@ test("rejection → Payment not approved; send error → Transaction failed in y
   await page2.goto(mock.url(s2));
   await page2.getByTestId("path-wallet").click();
   await page2.getByTestId("sol-wallet-mock-phantom").click();
-  await page2.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page2, "route_quote", SPL);
   await page2.getByTestId("wallet-send").click();
   await expect(page2.getByTestId("wallet-pay")).toContainText("Transaction failed in your wallet");
   await expect(page2.getByTestId("wallet-pay")).toContainText("blockhash not found");
@@ -182,7 +193,7 @@ test("Solana RPC down → retry, no prompt", async ({ page, mock }) => {
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await expect(page.getByTestId("solana-rpc-error")).toBeVisible();
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   await page.unroute("https://api.mainnet-beta.solana.com/**");
@@ -198,7 +209,7 @@ test("test mode never broadcasts from a Solana wallet: Simulate payment", async 
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("sol-wallet-mock-phantom").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   await page.getByTestId("simulate").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
@@ -210,7 +221,7 @@ test("manual path: Solana Pay QR for SPL (with the reconciled mint) and BIP-21 f
   const s = solSession(mock, true, { autoSucceed: false });
   await page.goto(mock.url(s));
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${SPL}`).click();
+  await choose(page, "route_quote", SPL);
   await page.getByTestId("refund-address").fill("0xnot-solana");
   await page.getByTestId("refund-address").blur();
   await expect(page.getByTestId("refund-error")).toBeVisible();
@@ -230,7 +241,7 @@ test("manual path: Solana Pay QR for SPL (with the reconciled mint) and BIP-21 f
   );
   await page.goto(mock.url(b));
   await page.getByTestId("path-manual").click();
-  await page.getByTestId("option-route_quote-nep141:btc.omft.near").click();
+  await choose(page, "route_quote", "nep141:btc.omft.near");
   await page.getByTestId("refund-address").fill("bc1pzkakv8d86xwnrvzx262umfvz04dxjeegc4lez8aqdlx50zjfsr5qrjf5pr");
   await page.getByTestId("continue").click();
   await page.getByTestId("confirm-network").check();
