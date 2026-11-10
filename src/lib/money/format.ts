@@ -73,3 +73,29 @@ export function roundUpSignificant(amount: bigint, digits = 2): bigint {
   const unit = 10n ** BigInt(len - digits);
   return ((amount + unit - 1n) / unit) * unit;
 }
+
+/** Significant digits shown for token amounts in the picker (balances, amounts needed, estimates). */
+export const DISPLAY_SIGNIFICANT = 6;
+
+/**
+ * Base units → display string with at most `digits` significant digits, exact bigint arithmetic:
+ * `floor` for balances (never overstated), `ceil` for amounts needed (never understated). Whole units
+ * are never cut (`"1,234,567"` stays), only fraction digits: `"1562859786699476"`, 18 → `"0.00156285"`
+ * (floor), `"481720114165824"`, 18 → `"0.000481721"` (ceil), `"4521015"`, 6 → `"4.52101"`.
+ */
+export function formatSignificant(
+  amount: string,
+  decimals: number,
+  rounding: "floor" | "ceil",
+  digits = DISPLAY_SIGNIFICANT,
+): string {
+  if (!BASE_UNITS.test(amount)) throw new RangeError(`not a base-unit amount: ${amount}`);
+  if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) throw new RangeError(`bad decimals: ${decimals}`);
+  if (!Number.isInteger(digits) || digits < 1) throw new RangeError(`bad digits: ${digits}`);
+  const v = BigInt(amount);
+  const drop = Math.min(amount.length - digits, decimals);
+  if (v === 0n || drop <= 0) return formatBaseUnits(amount, decimals);
+  const unit = 10n ** BigInt(drop);
+  const rounded = rounding === "ceil" ? ((v + unit - 1n) / unit) * unit : (v / unit) * unit;
+  return formatBaseUnits(rounded.toString(), decimals);
+}

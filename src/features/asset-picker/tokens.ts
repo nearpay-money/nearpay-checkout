@@ -8,8 +8,8 @@
  */
 
 import { parseOmftAssetId } from "@nearpay/spec";
-import { formatMoney } from "@nearpay-internal/ui";
 import type { Option } from "../../app/machine";
+import { formatBaseUnits, formatSignificant } from "../../lib/money/format";
 import { isSolanaWalletOption, optionKey, optionWalletAsset } from "./options";
 
 export type WalletFamily = "evm" | "near" | "solana";
@@ -49,8 +49,11 @@ export function balanceTarget(o: Option, family: WalletFamily): BalanceTarget | 
   return null;
 }
 
-/** Balances by option key (base units); options without a readable balance are absent. */
-export type Balances = ReadonlyMap<string, string>;
+/**
+ * Balances by option key (base units). `null` = the read failed for that option (balance unknown — the
+ * token stays listed and selectable); options without a readable balance here are absent.
+ */
+export type Balances = ReadonlyMap<string, string | null>;
 
 /** Outcome of reading the connected wallet's balances for one network's options. */
 export type BalanceRead =
@@ -64,6 +67,8 @@ export interface TokenRow {
   readonly option: Option;
   /** Wallet balance, when read. */
   readonly balance: string | null;
+  /** The balance read failed for this option ("Balance unavailable"; still selectable). */
+  readonly unavailable: boolean;
   /** Balance below the indicative amount of this payment (only when that amount is known). */
   readonly short: boolean;
 }
@@ -85,9 +90,15 @@ function byValue(a: TokenRow, b: TokenRow): number {
 }
 
 function row(o: Option, balances: Balances | null): TokenRow {
-  const balance = balances?.get(optionKey(o)) ?? null;
+  const key = optionKey(o);
+  const balance = balances?.get(key) ?? null;
   const est = o.estimated_amount_in;
-  return { option: o, balance, short: balance !== null && est !== null && BigInt(balance) < BigInt(est) };
+  return {
+    option: o,
+    balance,
+    unavailable: balances?.has(key) === true && balance === null,
+    short: balance !== null && est !== null && BigInt(balance) < BigInt(est),
+  };
 }
 
 /**
@@ -95,15 +106,16 @@ function row(o: Option, balances: Balances | null): TokenRow {
  *
  * - No balances (no wallet, manual path, test mode, read failed) or `showAll`: every option, in server
  *   order, with the balance where it is known.
- * - Balances: only options whose balance is > 0 (or could not be read for that option), usable ones
- *   first, then those the balance doesn't cover ("Not enough"), each group by value.
+ * - Balances: only options whose balance is > 0 or unknown (no readable balance, or the read failed —
+ *   never hidden as if empty), usable ones first, then those the balance doesn't cover ("Not enough"),
+ *   each group by value; unknown balances after the known ones, in server order.
  */
 export function tokenRows(options: readonly Option[], balances: Balances | null, showAll: boolean): TokenRow[] {
   const rows = options.map((o) => row(o, balances));
   if (!balances || showAll) return rows;
   const rank = (r: TokenRow): number => (!r.option.available ? 2 : r.short ? 1 : 0);
   return rows
-    .filter((r) => !balances.has(optionKey(r.option)) || BigInt(r.balance ?? "0") > 0n)
+    .filter((r) => r.balance === null || BigInt(r.balance) > 0n)
     .map((r, i) => ({ r, i }))
     .sort((x, y) => {
       const k = rank(x.r) - rank(y.r);
@@ -120,18 +132,24 @@ export function tokenRows(options: readonly Option[], balances: Balances | null,
 /** Whether a row can be picked (available route, balance not known to be short). */
 export const rowSelectable = (r: TokenRow): boolean => r.option.available && !r.short;
 
-/** Fraction digits shown for a balance. */
-export const BALANCE_DIGITS = 6;
+/** Smallest balance shown as a number: below it, "< 0.000001" (fraction digits of the dust floor). */
+export const DUST_DIGITS = 6;
 
 /**
- * Balance for display: rounded DOWN to 6 fraction digits (never overstated), "< 0.000001" for dust.
- * Exact bigint/string arithmetic (ui `formatMoney`).
+ * Balance for display: at most 6 significant digits, rounded DOWN (never overstated) — "0.00156285",
+ * "4.52101", "1,234.56" — and "< 0.000001" for dust. Exact bigint/string arithmetic.
  */
 export function formatBalance(amount: string, decimals: number): string {
-  const max = Math.min(decimals, BALANCE_DIGITS);
-  const shown = formatMoney({ amount, decimals, maxFraction: max, rounding: "floor" });
-  if (BigInt(amount) > 0n && !/[1-9]/.test(shown)) {
-    return `< ${formatMoney({ amount: "1", decimals: max, minFraction: max })}`;
-  }
-  return shown;
+  const floor = Math.min(decimals, DUST_DIGITS);
+  const v = BigInt(amount);
+  if (v > 0n && v < 10n ** BigInt(decimals - floor)) return `< ${formatBaseUnits("1", floor, floor)}`;
+  return formatSignificant(amount, decimals, "floor");
+}
+
+/**
+ * An amount the payer needs or will send, for display with its symbol: at most 6 significant digits,
+ * rounded UP (never understated) — "0.000481721 ETH", "1.52 USDC".
+ */
+export function formatNeeded(amount: string, decimals: number, symbol: string): string {
+  return `${formatSignificant(amount, decimals, "ceil")} ${symbol}`;
 }

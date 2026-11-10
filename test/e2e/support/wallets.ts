@@ -8,7 +8,7 @@ import type { Page } from "@playwright/test";
 export interface EvmReads {
   /** Native balance (hex wei). */
   readonly native: string;
-  /** ERC-20 balances by lower-case token address (hex base units); others are 0. */
+  /** ERC-20 balances by lower-case token address (hex base units, or "error" to fail the read); others are 0. */
   readonly tokens?: Record<string, string>;
   /** `eth_estimateGas` / `eth_gasPrice` / latest `baseFeePerGas` / OP-stack L1 fee upper bound (hex). */
   readonly gas?: {
@@ -64,7 +64,11 @@ export async function injectEvmWallet(
                 if (reads.gas?.l1Fee) return reads.gas.l1Fee;
                 break;
               }
-              if (c.data.startsWith("0x70a08231")) return reads.tokens?.[c.to.toLowerCase()] ?? "0x0";
+              if (c.data.startsWith("0x70a08231")) {
+                const v = reads.tokens?.[c.to.toLowerCase()] ?? "0x0";
+                if (v === "error") throw Object.assign(new Error("execution reverted"), { code: -32000 });
+                return v;
+              }
               break;
             }
             case "eth_estimateGas":

@@ -58,3 +58,28 @@ export const RICH: EvmReads = {
   tokens: { [USDC]: hex(12_340_000n), [USDT]: "0x0", [DAI]: hex(1_500_000_000_000_000_000n) },
   gas: { estimate: hex(65_000n), price: hex(10_000_000n), baseFee: hex(5_000_000n), l1Fee: hex(1_000_000_000n) },
 };
+
+/**
+ * Live-beta regression (MetaMask on Base): 4.521015 USDC and 0.001562859786699476 ETH in the wallet,
+ * dust in its NEAR Intents balance; the server lists the ETH Intents transfer first, as rails does.
+ */
+export const PROD_PAYER_READS: EvmReads = {
+  native: "0x58d69a66b82d4", // 1562859786699476 wei
+  tokens: { [USDC]: `0x${"44fc37".padStart(64, "0")}` }, // 4521015, a full 32-byte word as nodes answer
+  gas: { estimate: hex(65_000n), price: hex(10_000_000n), baseFee: hex(5_000_000n), l1Fee: hex(1_000_000_000n) },
+};
+export const PROD_NEEDED_ETH = "481720114165824";
+export const PROD_OPTIONS = [
+  opt(ETH_BASE, "near:mainnet", "ETH", 18, PROD_NEEDED_ETH, {
+    method: "intents_transfer",
+    route_class: "intents_transfer",
+    token: null,
+  }),
+  opt(omft(USDC), "eip155:8453", "USDC", 6, "1520000", {
+    token: { standard: "erc20", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+  }),
+  opt(ETH_BASE, "eip155:8453", "ETH", 18, PROD_NEEDED_ETH, {
+    route_class: "same_asset",
+    token: { standard: "native", address: null },
+  }),
+];

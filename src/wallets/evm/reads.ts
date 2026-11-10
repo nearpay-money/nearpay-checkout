@@ -36,10 +36,16 @@ export async function walletChainId(p: Eip1193Provider): Promise<number> {
   return Number(id);
 }
 
+/**
+ * ERC-20 `balanceOf(owner)`. An empty result (`"0x"`: no contract at `token` on the wallet's chain, or a
+ * node that answered nothing) is NOT a zero balance — it throws, so the balance shows as unknown.
+ */
 export async function erc20BalanceOf(p: Eip1193Provider, token: string, owner: string): Promise<bigint> {
   if (!ADDR.test(token) || !ADDR.test(owner)) throw new RangeError("not an EVM address");
   const data = `${ERC20_BALANCE_OF}${word(owner.slice(2).toLowerCase())}`;
-  return hexToBigint(await call(p, "eth_call", [{ to: token, data }, "latest"]), "balanceOf");
+  const res = await call(p, "eth_call", [{ to: token, data }, "latest"]);
+  if (res === "0x") throw new Error("balanceOf returned no data");
+  return hexToBigint(res, "balanceOf");
 }
 
 export async function nativeBalance(p: Eip1193Provider, owner: string): Promise<bigint> {
