@@ -279,7 +279,7 @@ export const en = {
   "waiting.badge": "Pending",
   "confirming.title": "Confirming your payment",
   "confirming.body": "Your payment was detected. Keep this page open while we confirm it.",
-  "confirming.bodyChainFast": "Payment received — confirming on {chain} (usually under a minute).",
+  "confirming.bodyChainFast": "Payment received — confirming on {chain}… usually a few seconds",
   "confirming.bodyChain": "Payment received — confirming on {chain}.",
   "confirming.badge": "Payment detected",
   "confirming.callout": "Don't send another payment.",
