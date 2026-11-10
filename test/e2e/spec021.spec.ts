@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { USDC_BASE, USDC_NEAR } from "../support/sessions";
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay, MockSession } from "./support/mock-server";
+import { choose } from "./support/pay";
 import { injectEvmWallet } from "./support/wallets";
 
 const TOKEN = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
@@ -11,7 +12,7 @@ async function toReview(page: Page, mock: MockNearPay, s: MockSession) {
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("evm-wallet-test.mockwallet").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await expect(page.getByTestId("wallet-send")).toBeVisible();
 }
 
@@ -24,6 +25,9 @@ for (const [fee, shown] of [
     await injectEvmWallet(page, { chainId: "0x2105" });
     const s = mock.create({ livemode: true }, { feeAmount: fee });
     await toReview(page, mock, s);
+    // Phones: the price and fee rows sit in the "Price and fees" disclosure.
+    await page.getByText("Price and fees").click();
+    await expect(page.getByTestId("payment-fees")).toBeVisible();
     await expect(page.getByTestId("payment-fees")).toHaveText(shown);
     await expect(page.getByTestId("total-to-send")).toHaveText("2.005013 USDC");
   });
@@ -35,6 +39,8 @@ test("older servers without fee_amount: Included in total", async ({ page, mock 
   const s = mock.create({ livemode: true });
   await toReview(page, mock, s);
   await expect(page.getByTestId("payment-fees")).toHaveCount(0);
+  await expect(page.getByText("Included in total")).toBeHidden();
+  await page.getByText("Price and fees").click();
   await expect(page.getByText("Included in total")).toBeVisible();
 });
 
@@ -42,7 +48,7 @@ test("We received less than expected: Received and Still to send from amount_rec
   const s = mock.create();
   await page.goto(mock.url(s));
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("manual-instructions")).toBeVisible();

@@ -2,12 +2,13 @@ import type { Page } from "@playwright/test";
 import { USDC_BASE, USDC_NEAR } from "../support/sessions";
 import { expect, test } from "./support/fixtures";
 import type { MockNearPay, MockSession } from "./support/mock-server";
+import { choose } from "./support/pay";
 
 async function manualToInstructions(page: Page, mock: MockNearPay, s: MockSession) {
   await page.goto(mock.url(s));
   await expect(page.getByTestId("price")).toHaveText("$2.00");
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("manual-instructions")).toBeVisible();
@@ -24,10 +25,18 @@ test("manual path in test mode: verified merchant, guarded address, simulate, su
   // The unverified merchant name from payments is never rendered (L-CK-03).
   await expect(page.getByText("Acme (unverified)")).toHaveCount(0);
   await page.getByTestId("path-manual").click();
+  // Best route preselected (Base · USDC) with its indicative amount; Ethereum is listed but unavailable.
+  await expect(page.getByTestId("selected-estimate")).toContainText("2.005013 USDC");
+  await page.getByTestId("network-picker-trigger").click();
+  await expect(page.getByTestId("network-eip155:1")).toContainText("Too slow");
+  await expect(page.getByTestId("network-eip155:1")).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByTestId("network-intents")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByTestId("token-picker-trigger").click();
   await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`)).toContainText("≈ 2.005013 USDC");
-  await expect(page.getByTestId("option-route_quote-nep141:eth.omft.near")).toContainText("Too slow");
   await expect(page.getByTestId(`option-intents_transfer-${USDC_NEAR}`)).toHaveCount(0);
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await page.keyboard.press("Escape");
+  await choose(page, "route_quote", USDC_BASE);
   await expect(page.getByTestId("refund-warning")).toContainText("Do not use an exchange deposit address.");
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169Ee7");
   await page.getByTestId("refund-address").blur();
@@ -110,7 +119,7 @@ for (const mode of [
     const s = mock.create({}, { sentinel: mode });
     await page.goto(mock.url(s));
     await page.getByTestId("path-manual").click();
-    await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+    await choose(page, "route_quote", USDC_BASE);
     await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
     await page.getByTestId("continue").click();
     await expect(page.getByTestId("verify-failed")).toBeVisible();
@@ -123,7 +132,7 @@ for (const mode of [
     // Retry creates a new attempt and verifies again.
     s.sentinel = "ok";
     await page.getByTestId("retry").click();
-    await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+    await choose(page, "route_quote", USDC_BASE);
     await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
     await page.getByTestId("continue").click();
     await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
@@ -192,7 +201,7 @@ test("attempt errors: route too slow stays on the picker, geo block blocks", asy
   const s = mock.create({}, { attemptError: "route_too_slow" });
   await page.goto(mock.url(s));
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("error")).toContainText("can't complete in the time left");

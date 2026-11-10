@@ -1,7 +1,7 @@
 /**
  * Solana JSON-RPC reads for the wallet path (lld/checkout-and-js.md §11, `VITE_SOLANA_RPC_URL`):
  * recent blockhash, the mint's owner program (classic Token vs Token-2022) and whether the deposit's
- * token account exists (its rent is part of the network-fee note).
+ * token account exists (its rent is part of the network-fee note). Balance reads are in `balances.ts`.
  */
 import bs58 from "bs58";
 import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from "./tx";
@@ -9,7 +9,7 @@ import { TOKEN_2022_PROGRAM, TOKEN_PROGRAM } from "./tx";
 /** Rent-exempt minimum of a 165-byte token account (lamports), used when the RPC can't say. */
 export const ATA_RENT_FALLBACK = "2039280";
 
-async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
+export async function rpc<T>(url: string, method: string, params: unknown[]): Promise<T> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

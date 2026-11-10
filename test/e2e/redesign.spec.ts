@@ -3,12 +3,13 @@ import type { Page } from "@playwright/test";
 import { USDC_BASE } from "../support/sessions";
 import { a11yBasics } from "./support/a11y";
 import { expect, test } from "./support/fixtures";
+import { choose } from "./support/pay";
 import { injectEvmWallet } from "./support/wallets";
 
 async function toReview(page: Page) {
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("evm-wallet-test.mockwallet").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await expect(page.getByTestId("wallet-send")).toBeVisible();
 }
 
@@ -30,7 +31,7 @@ test("wallet review: attested totals, fee note, quote countdown, change", async 
   await a11yBasics(page);
   await page.getByTestId("change-option").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await expect(page.getByTestId("wallet-send")).toBeVisible();
   expect(mock.callsTo("createPaymentAttempt")).toHaveLength(2);
 });
@@ -75,27 +76,11 @@ test("an expired wallet quote asks for a new one and shows the updated total", a
   await expect(page.getByTestId("wallet-pay")).toContainText("2.005013 USDC");
 });
 
-test("search and network filter, no matching options, clear filters", async ({ page, mock }) => {
-  const s = mock.create();
-  await page.goto(mock.url(s));
-  await page.getByTestId("path-manual").click();
-  await page.getByTestId("asset-search").fill("doge");
-  await expect(page.getByTestId("no-match")).toContainText("No matching payment options");
-  await page.getByRole("button", { name: "Clear filters" }).click();
-  await page.getByTestId("network-filter").click();
-  await expect(page.getByTestId("choose-network")).toBeVisible();
-  await page.getByRole("option", { name: "Base" }).click();
-  await page.getByTestId("network-apply").click();
-  await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`)).toBeVisible();
-  await expect(page.getByTestId("option-route_quote-nep141:eth.omft.near")).toHaveCount(0);
-  await a11yBasics(page);
-});
-
 test("a wrongly attested asset is a verification failure", async ({ page, mock }) => {
   const s = mock.create({}, { attestAsset: "wrong" });
   await page.goto(mock.url(s));
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
   await expect(page.getByTestId("verify-failed")).toBeVisible();
@@ -123,7 +108,7 @@ test("payment link: shows the link, opens a session, continues in the normal flo
   expect(new URL(page.url()).hash).toBe(`#${s.secret}`);
   expect(mock.callsTo("getPublicCheckoutSession")[0]?.headers["x-nearpay-client-secret"]).toBe(s.secret);
   await page.getByTestId("path-manual").click();
-  await page.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(page, "route_quote", USDC_BASE);
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
   await page.getByTestId("simulate").click();

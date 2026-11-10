@@ -12,6 +12,7 @@ import {
   Callout,
   ClockIcon,
   Countdown,
+  formatMoney,
   type KeyValueItem,
   KeyValueList,
   Money,
@@ -26,6 +27,7 @@ import type { Checkout } from "../../app/useCheckout";
 import { chainName, getChain } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { assetMoney } from "../../lib/money/display";
+import { roundUpSignificant } from "../../lib/money/format";
 import { ScreenTitle, StateScreen } from "../../ui/blocks";
 import { shortAddress } from "../wallet-connect/wallets";
 
@@ -83,38 +85,46 @@ function Selection({ c, vm, disabled }: { c: Checkout; vm: ViewModel; disabled: 
 
 function Totals({ c, vm, compact = false }: { c: Checkout; vm: ViewModel; compact?: boolean }) {
   // Desktop: the order summary column carries the breakdown; the review card shows what is sent.
-  const items: KeyValueItem[] = compact
-    ? [{ label: t("summary.youSend"), value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span> }]
-    : [
-        {
-          label: t("summary.purchase"),
-          value: <span data-testid="purchase">{vm.price ? <Money {...vm.price} /> : vm.priceText}</span>,
-        },
-        {
-          label: t("summary.fees"),
-          value:
-            vm.fee === "0" ? (
-              <span data-testid="payment-fees">{t("summary.feesNone")}</span>
-            ) : vm.fee ? (
-              <span data-testid="payment-fees">{amountNode(vm.fee, vm)}</span>
-            ) : (
-              <span className="np-text-secondary">{t("summary.feesIncluded")}</span>
-            ),
-        },
-        {
-          label: t("summary.totalToSend"),
-          value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span>,
-          total: true,
-        },
-      ];
+  // Phones: "Total to send" stays visible; Purchase and Payment fees move into a disclosure.
+  const total: KeyValueItem = compact
+    ? { label: t("summary.youSend"), value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span> }
+    : {
+        label: t("summary.totalToSend"),
+        value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span>,
+        total: true,
+      };
+  const breakdown: KeyValueItem[] = [
+    {
+      label: t("summary.purchase"),
+      value: <span data-testid="purchase">{vm.price ? <Money {...vm.price} /> : vm.priceText}</span>,
+    },
+    {
+      label: t("summary.fees"),
+      value:
+        vm.fee === "0" ? (
+          <span data-testid="payment-fees">{t("summary.feesNone")}</span>
+        ) : vm.fee ? (
+          <span data-testid="payment-fees">{amountNode(vm.fee, vm)}</span>
+        ) : (
+          <span className="np-text-secondary">{t("summary.feesIncluded")}</span>
+        ),
+    },
+  ];
   const att = c.state.verified?.attestation;
   const evm = att?.kind === "route_quote" && att.deposit && getChain(att.deposit.chain)?.family === "evm";
   const sol = c.state.wallet?.family === "solana";
   const rent = c.solana?.state === "ready" ? c.solana.rentLamports : null;
   return (
     <div className="np-stack np-stack--sm">
-      <KeyValueList items={items} />
-      <p className="np-checkout__note" data-testid="network-fee-note">
+      {compact ? null : (
+        <details className="ck-disclosure" data-testid="fee-details">
+          <summary className="ck-disclosure__summary">{t("review.feeDetails")}</summary>
+          <KeyValueList items={breakdown} />
+        </details>
+      )}
+      <KeyValueList items={[total]} />
+      {/* With a network-fee warning on screen, the generic fee note would only repeat it. */}
+      <p className="np-checkout__note" data-testid="network-fee-note" hidden={c.gas?.state === "short"}>
         {att?.kind === "intents_transfer"
           ? t("review.intentsFee")
           : sol
@@ -137,11 +147,46 @@ function QuoteNote({ c }: { c: Checkout }) {
   );
 }
 
+/**
+ * The wallet holds the payment but not the network fee (pre-check, `c.gas` short): say how much is
+ * needed and offer the deposit-address path (no gas from this wallet) or another network / token.
+ * The wallet is not opened.
+ */
+function GasWarning({ c, onManual }: { c: Checkout; onManual: () => void }) {
+  const g = c.gas;
+  if (g?.state !== "short") return null;
+  const amount = formatMoney({
+    amount: roundUpSignificant(BigInt(g.need)).toString(),
+    decimals: g.decimals,
+    symbol: g.symbol,
+  });
+  const vars = { amount, chain: chainName(g.chain), symbol: g.symbol };
+  return (
+    <>
+      <Callout tone="warning" title={t("gas.title", { symbol: g.symbol })} live data-testid="gas-warning">
+        {t(g.native ? "gas.bodyNative" : "gas.body", vars)}
+      </Callout>
+      <div className="np-stack">
+        <Button fullWidth onClick={onManual} data-testid="gas-manual">
+          {t("gas.manual")}
+        </Button>
+        <Button fullWidth variant="secondary" onClick={c.actions.change} data-testid="gas-change">
+          {t("gas.change")}
+        </Button>
+        <button type="button" className="np-link-button ck-center" onClick={c.retryGas} data-testid="gas-recheck">
+          {t("gas.again")}
+        </button>
+      </div>
+    </>
+  );
+}
+
 export function WalletPay({
   c,
   vm,
   screen,
   wide,
+  onManual,
 }: {
   c: Checkout;
   vm: ViewModel;
@@ -157,7 +202,10 @@ export function WalletPay({
   >;
   /** Desktop review: also offer "Send from another wallet". */
   wide: boolean;
+  /** Switch to the deposit-address path (keeps the chosen token preselected). */
+  onManual: () => void;
 }) {
+  const gasShort = c.gas?.state === "short";
   const { actions, busy } = c;
   const total = amountText(vm.total, vm);
   const ref = vm.reference ? referenceText(vm.reference, vm.merchant?.name ?? null) : undefined;
@@ -293,12 +341,22 @@ export function WalletPay({
           />
           <p className="np-checkout__note">{t("updated.includes")}</p>
         </div>
-        <div className="np-stack">
-          <Button fullWidth onClick={() => void actions.payWithWallet()} data-testid="wallet-send">
-            {payLabel}
-          </Button>
-          <QuoteNote c={c} />
-        </div>
+        {gasShort ? (
+          <GasWarning c={c} onManual={onManual} />
+        ) : (
+          <div className="np-stack">
+            <Button
+              fullWidth
+              onClick={() => void actions.payWithWallet()}
+              loading={c.preparing}
+              loadingText={t("gas.checking")}
+              data-testid="wallet-send"
+            >
+              {payLabel}
+            </Button>
+            <QuoteNote c={c} />
+          </div>
+        )}
       </section>
     );
   }
@@ -318,33 +376,37 @@ export function WalletPay({
       ) : sol?.state === "error" ? (
         <Callout tone="danger" title={t("review.solanaError")} live data-testid="solana-rpc-error" />
       ) : null}
-      <div className="np-stack">
-        {sol?.state === "manual" ? (
-          <Button fullWidth onClick={actions.useManual} data-testid="use-manual">
-            {t("txFailed.manual")}
-          </Button>
-        ) : sol?.state === "error" ? (
-          <Button fullWidth onClick={c.retrySolana} data-testid="solana-retry">
-            {t("review.solanaRetry")}
-          </Button>
-        ) : (
-          <Button
-            fullWidth
-            onClick={() => void actions.payWithWallet()}
-            loading={sol?.state === "checking"}
-            loadingText={t("review.solanaChecking")}
-            data-testid="wallet-send"
-          >
-            {payLabel}
-          </Button>
-        )}
-        {wide && sol?.state !== "manual" ? (
-          <Button fullWidth variant="secondary" onClick={actions.useManual} data-testid="use-manual">
-            {t("review.sendAnother")}
-          </Button>
-        ) : null}
-        <QuoteNote c={c} />
-      </div>
+      {gasShort ? (
+        <GasWarning c={c} onManual={onManual} />
+      ) : (
+        <div className="np-stack">
+          {sol?.state === "manual" ? (
+            <Button fullWidth onClick={actions.useManual} data-testid="use-manual">
+              {t("txFailed.manual")}
+            </Button>
+          ) : sol?.state === "error" ? (
+            <Button fullWidth onClick={c.retrySolana} data-testid="solana-retry">
+              {t("review.solanaRetry")}
+            </Button>
+          ) : (
+            <Button
+              fullWidth
+              onClick={() => void actions.payWithWallet()}
+              loading={sol?.state === "checking" || c.preparing}
+              loadingText={c.preparing ? t("gas.checking") : t("review.solanaChecking")}
+              data-testid="wallet-send"
+            >
+              {payLabel}
+            </Button>
+          )}
+          {wide && sol?.state !== "manual" ? (
+            <Button fullWidth variant="secondary" onClick={actions.useManual} data-testid="use-manual">
+              {t("review.sendAnother")}
+            </Button>
+          ) : null}
+          <QuoteNote c={c} />
+        </div>
+      )}
     </section>
   );
 }

@@ -79,6 +79,10 @@ export function SendFromAnotherWallet({
             data-testid="refund-address"
           />
         </Field>
+        <details className="ck-disclosure" data-testid="refund-why">
+          <summary className="ck-disclosure__summary">{t("refund.why")}</summary>
+          <p className="ck-disclosure__body">{t("refund.whyBody", { chain })}</p>
+        </details>
         <Callout tone="warning" title={t("manual.networkTitle")}>
           {t("manual.networkBody", { chain })}
         </Callout>

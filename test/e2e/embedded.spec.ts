@@ -1,6 +1,7 @@
 import { USDC_BASE } from "../support/sessions";
 import { expect, test } from "./support/fixtures";
 import { MerchantSite } from "./support/merchant";
+import { choose } from "./support/pay";
 
 const merchant = new MerchantSite();
 test.beforeAll(async () => merchant.start());
@@ -37,7 +38,7 @@ test("embedded on an allowed origin: ready, resize, appearance, complete", async
   expect(look?.accent).toMatch(/^#[0-9a-f]{6}$/);
 
   await frame.getByTestId("path-manual").click();
-  await frame.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(frame, "route_quote", USDC_BASE);
   await frame.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await frame.getByTestId("continue").click();
   await expect(frame.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
@@ -67,7 +68,7 @@ test("embedded, polling only (no SSE): np:complete still carries the session's p
   await page.goto(`${merchant.origin}/shop`);
   const frame = page.frameLocator("#np");
   await frame.getByTestId("path-manual").click();
-  await frame.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(frame, "route_quote", USDC_BASE);
   await frame.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await frame.getByTestId("continue").click();
   await frame.getByTestId("simulate").click();
@@ -107,7 +108,7 @@ test("embedded: blocked states after verification are reported with np:error", a
   await page.goto(`${merchant.origin}/shop`);
   const frame = page.frameLocator("#np");
   await frame.getByTestId("path-manual").click();
-  await frame.getByTestId(`option-route_quote-${USDC_BASE}`).click();
+  await choose(frame, "route_quote", USDC_BASE);
   await frame.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await frame.getByTestId("continue").click();
   await expect(frame.getByTestId("blocked-geo_blocked")).toBeVisible();
