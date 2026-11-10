@@ -153,10 +153,11 @@ export const en = {
   "verifyFailed.retry": "Try verification again",
   "verifyFailed.reason": "Reason: {reason}",
 
-  "trust.reviewed": "Reviewed",
-  "trust.reviewedText": "Business details reviewed by NearPay",
-  "trust.notReviewed": "Not reviewed",
-  "trust.notReviewedText": "Business details not reviewed by NearPay",
+  // open onboarding (ADR-0024): business details are self-declared, not reviewed by NearPay
+  "trust.reviewed": "Declared",
+  "trust.reviewedText": "Business details declared by the merchant",
+  "trust.notReviewed": "Not declared",
+  "trust.notReviewedText": "Business details not declared yet",
   "trust.destination": "Payment destination",
   "trust.fingerprint": "Destination fingerprint",
   "trust.fingerprintHelp":
