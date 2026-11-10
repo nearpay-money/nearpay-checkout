@@ -10,13 +10,13 @@
  * Continue: the wallet path prepares the payment (attempt + sentinel verification → review), the
  * manual path opens "Send from another wallet".
  */
-import { Button, Skeleton, StatusBadge } from "@nearpay-internal/ui";
+import { Button, Skeleton } from "@nearpay-internal/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectedWallet, Option } from "../../app/machine";
 import type { WalletReads } from "../../app/useCheckout";
 import { chainName } from "../../lib/chains/chains";
 import { hasMessage, t } from "../../lib/i18n/t";
-import { ScreenTitle } from "../../ui/blocks";
+import { ScreenTitle, WalletLine } from "../../ui/blocks";
 import { Picker, type PickerItem } from "../../ui/Picker";
 import { shortAddress } from "../wallet-connect/wallets";
 import { defaultNetwork, INTENTS_NETWORK, networkKey, networksOf, optionKey, optionNetwork } from "./options";
@@ -83,6 +83,8 @@ export interface PayWithProps {
   walletReads: WalletReads | null;
   /** Option to preselect (e.g. the same token after "Pay from another wallet or exchange"). */
   preferKey?: string | null;
+  /** Formatted wallet balances (by option key) of the network just read, for the review's token card. */
+  onBalances?: (balances: ReadonlyMap<string, string>) => void;
 }
 
 export function PayWith({
@@ -94,6 +96,7 @@ export function PayWith({
   needsChallenge,
   walletReads,
   preferKey = null,
+  onBalances,
 }: PayWithProps) {
   const all = useMemo(() => options ?? [], [options]);
   const networks = useMemo(() => networksOf(all), [all]);
@@ -139,6 +142,15 @@ export function PayWith({
   }, [walletReads, net, netOptions, readRun]);
 
   const held = balance?.state === "ok" ? balance.balances : null;
+  useEffect(() => {
+    if (!held || !onBalances) return;
+    const out = new Map<string, string>();
+    for (const o of netOptions) {
+      const b = held.get(optionKey(o));
+      if (typeof b === "string") out.set(optionKey(o), formatBalance(b, o.decimals));
+    }
+    onBalances(out);
+  }, [held, netOptions, onBalances]);
   const rows = useMemo(() => tokenRows(netOptions, held, showAll), [netOptions, held, showAll]);
   const selectable = rows.filter(rowSelectable);
   const tokenKey =
@@ -186,17 +198,9 @@ export function PayWith({
 
   return (
     <section className="ck-screen ck-paywith" data-testid="asset-picker" aria-labelledby="ck-paywith-title">
-      {wallet ? (
-        <p className="ck-connected" data-testid="connected-wallet">
-          <StatusBadge tone="success">{t("wallet.connected")}</StatusBadge>
-          <span className="np-checkout__note">
-            {t("wallet.connectedAs", { wallet: wallet.label, address: shortAddress(wallet.address) })}
-          </span>
-        </p>
-      ) : null}
       <ScreenTitle id="ck-paywith-title" title={t("asset.title")} />
       {options === null ? (
-        <div className="ck-pickers" aria-busy="true" data-testid="options-loading">
+        <div className="np-pickers" aria-busy="true" data-testid="options-loading">
           <p className="np-sr-only" role="status">
             {t("asset.loading")}
           </p>
@@ -204,7 +208,7 @@ export function PayWith({
           <Skeleton shape="block" />
         </div>
       ) : (
-        <div className="ck-pickers">
+        <div className="np-pickers">
           <Picker
             label={t("asset.network")}
             items={networkItems}
@@ -227,13 +231,14 @@ export function PayWith({
             items={tokenItems}
             value={tokenKey}
             onChange={setPicked}
-            triggerDescription={
+            triggerBalance={
               selectedRow?.balance != null && selected
-                ? t("asset.balance", { amount: formatBalance(selectedRow.balance, selected.decimals) })
-                : selectedRow?.unavailable
-                  ? t("asset.balanceUnavailable")
-                  : undefined
+                ? formatBalance(selectedRow.balance, selected.decimals)
+                : undefined
             }
+            balanceLabel={t("asset.balanceLabel")}
+            triggerDescription={selectedRow?.unavailable ? t("asset.balanceUnavailable") : undefined}
+            highlight={selected !== null}
             placeholder={t("asset.tokenPlaceholder")}
             searchLabel={t("asset.tokenSearch")}
             empty={
@@ -245,7 +250,7 @@ export function PayWith({
               held ? (
                 <button
                   type="button"
-                  className="np-link-button ck-picker__toggle"
+                  className="np-link-button np-picker__toggle"
                   aria-pressed={showAll}
                   onClick={() => setShowAll((v) => !v)}
                   data-testid="show-all-tokens"
@@ -261,6 +266,11 @@ export function PayWith({
           />
         </div>
       )}
+      {wallet ? (
+        <WalletLine testId="connected-wallet">
+          {t("review.walletLine", { wallet: wallet.label, address: shortAddress(wallet.address) })}
+        </WalletLine>
+      ) : null}
       {loadingBalances ? (
         <p className="np-checkout__note" role="status" data-testid="balances-loading">
           {t("asset.balancesLoading")}

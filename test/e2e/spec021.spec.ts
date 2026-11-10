@@ -25,8 +25,7 @@ for (const [fee, shown] of [
     await injectEvmWallet(page, { chainId: "0x2105" });
     const s = mock.create({ livemode: true }, { feeAmount: fee });
     await toReview(page, mock, s);
-    // Phones: the price and fee rows sit in the "Price and fees" disclosure.
-    await page.getByText("Price and fees").click();
+    // Design v2: the fee card (Merchant receives / Routing fee / Network fee / You send) is always open.
     await expect(page.getByTestId("payment-fees")).toBeVisible();
     await expect(page.getByTestId("payment-fees")).toHaveText(shown);
     await expect(page.getByTestId("total-to-send")).toHaveText("2.005013 USDC");
@@ -39,9 +38,7 @@ test("older servers without fee_amount: Included in total", async ({ page, mock 
   const s = mock.create({ livemode: true });
   await toReview(page, mock, s);
   await expect(page.getByTestId("payment-fees")).toHaveCount(0);
-  await expect(page.getByText("Included in total")).toBeHidden();
-  await page.getByText("Price and fees").click();
-  await expect(page.getByText("Included in total")).toBeVisible();
+  await expect(page.getByTestId("fee-card")).toContainText("Routing feeIncluded in total");
 });
 
 test("We received less than expected: Received and Still to send from amount_received", async ({ page, mock }) => {

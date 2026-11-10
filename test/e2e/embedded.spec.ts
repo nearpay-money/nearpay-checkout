@@ -29,12 +29,12 @@ test("embedded on an allowed origin: ready, resize, appearance, complete", async
     inline: document.querySelectorAll("[style]").length,
   }));
   expect(look).toMatchObject({ theme: "dark", radius: "4px" });
-  // The embedded document paints the merchant's theme (dark surface) over its full height.
+  // The embedded document paints the merchant's theme (v2 dark surface #12263f) over its full height.
   const paint = await page.frames()[1]?.evaluate(() => ({
     html: getComputedStyle(document.documentElement).backgroundColor,
     body: getComputedStyle(document.body).backgroundColor,
   }));
-  expect(paint).toEqual({ html: "rgb(25, 58, 63)", body: "rgb(25, 58, 63)" });
+  expect(paint).toEqual({ html: "rgb(18, 38, 63)", body: "rgb(18, 38, 63)" });
   expect(look?.accent).toMatch(/^#[0-9a-f]{6}$/);
 
   await frame.getByTestId("path-manual").click();

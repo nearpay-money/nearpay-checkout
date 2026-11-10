@@ -1,15 +1,19 @@
 /**
  * Renders the checkout for the current machine phase inside the ui `CheckoutFrame` (shared by hosted and
  * embedded mode). The phase → Figma frame mapping is `screenFor` (screens.ts); this file wires the
- * frame (merchant, amount hero, desktop summary, test-mode banner, back) and the per-screen UI state
+ * frame (merchant, amount hero, order summary, test-mode banner, back) and the per-screen UI state
  * (search, refund address, Turnstile token, the "still confirming" timer).
+ *
+ * Design v2: from 960 px the hosted page is the split layout — the navy order side (attested merchant,
+ * item, amount, line items with "You send", "How your payment travels") and the white pay side; below
+ * it one column with the order summary collapsed into a header + "Order details" (`OrderHeader`).
  */
-import { Callout, CheckoutFrame, KeyValueList, Money, Skeleton } from "@nearpay-internal/ui";
-import { lazy, type ReactNode, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Callout, CheckoutFrame, type KeyValueItem, Money, Skeleton } from "@nearpay-internal/ui";
+import { lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { webLinks } from "../config";
-import { optionKey } from "../features/asset-picker/options";
+import { optionKey, optionNetwork } from "../features/asset-picker/options";
 import { ManualInstructions } from "../features/deposit-instructions/ManualInstructions";
-import { TrustRow } from "../features/deposit-instructions/PaymentDetails";
+import { VerifiedMerchant } from "../features/deposit-instructions/PaymentDetails";
 import { WalletPay } from "../features/deposit-instructions/WalletPay";
 import { SendFromAnotherWallet } from "../features/refund-address/SendFromAnotherWallet";
 import { TurnstileWidget } from "../features/wallet-connect/TurnstileWidget";
@@ -18,6 +22,7 @@ import { errorText, t } from "../lib/i18n/t";
 import { assetMoney } from "../lib/money/display";
 import { useMediaQuery } from "../ui/useMediaQuery";
 import { buildModel, instructionsNetwork, moneyText, type ViewModel } from "./model";
+import { AmountWithLabel, OrderHeader, OrderLines, PaymentRoute, routeFrom, WIDE_QUERY } from "./OrderSummary";
 import {
   AddressExpiredScreen,
   BlockedScreen,
@@ -85,6 +90,8 @@ export interface CheckoutViewProps {
   completeActions?: ReactNode;
   /** Replaces the generic blocked screen for some reasons (hosted invoices: expired session). */
   renderBlocked?: (reason: NonNullable<Checkout["state"]["blockReason"]>) => ReactNode | null;
+  /** Hosted: the merchant's site (return URL host), shown under the attested merchant name. */
+  site?: string | null;
 }
 
 export function CheckoutView({
@@ -98,10 +105,11 @@ export function CheckoutView({
   summaryHead,
   completeActions,
   renderBlocked,
+  site = null,
 }: CheckoutViewProps) {
   const { state, actions, busy } = c;
   const switchToManual = actions.useManual;
-  const wide = useMediaQuery("(min-width: 880px)");
+  const wide = useMediaQuery(WIDE_QUERY);
   const vm = useMemo(() => buildModel(c), [c]);
   const [refund, setRefund] = useState("");
   const [manualForm, setManualForm] = useState(false);
@@ -110,6 +118,12 @@ export function CheckoutView({
   const [slow, setSlow] = useState(false);
   /** Token to preselect on the manual path after "Pay from another wallet or exchange" (fee warning). */
   const [preferKey, setPreferKey] = useState<string | null>(null);
+  /** Wallet balances read by "Pay with" (formatted, by option key), for the review's token card. */
+  const [balances, setBalances] = useState<ReadonlyMap<string, string>>(new Map());
+  const onBalances = useCallback(
+    (b: ReadonlyMap<string, string>) => setBalances((prev) => new Map([...prev, ...b])),
+    [],
+  );
 
   // The network-fee pre-check runs while `busy` but before any wallet prompt: stay on the review.
   const screen = screenFor(state, {
@@ -183,7 +197,7 @@ export function CheckoutView({
     if (from === "loading") return; // first paint: leave focus at the document start
     const active = document.activeElement;
     if (active && active !== document.body && active.isConnected) return;
-    const h = document.querySelector<HTMLElement>(".ck-screen h1");
+    const h = document.querySelector<HTMLElement>(".ck-flow .ck-screen h1");
     if (h) {
       h.setAttribute("tabindex", "-1");
       h.focus({ preventScroll: true });
@@ -224,6 +238,7 @@ export function CheckoutView({
               needsChallenge={pendingKey !== null && token === null && !busy}
               walletReads={c.walletReads}
               preferKey={preferKey}
+              onBalances={onBalances}
               onPick={(o) => {
                 setPreferKey(null);
                 actions.selectOption(o);
@@ -268,7 +283,8 @@ export function CheckoutView({
             c={c}
             vm={vm}
             screen={screen}
-            wide={wide && mode === "hosted"}
+            wide={wide}
+            balance={state.option ? (balances.get(optionKey(state.option)) ?? null) : null}
             onManual={() => {
               setPreferKey(state.option ? optionKey(state.option) : null);
               switchToManual();
@@ -319,31 +335,74 @@ export function CheckoutView({
     return undefined;
   })();
   const merchant = vm.merchant && state.phase !== "verify_failed" ? vm.merchant : null;
-  const amount = state.session ? (
-    <span data-testid="price">{vm.price ? <Money {...vm.price} size="hero" /> : vm.priceText}</span>
-  ) : null;
+  const loaded = state.session !== null;
+  const priceNode = vm.price ? <Money {...vm.price} size="hero" /> : vm.priceText;
   const showError = state.error && !(state.phase === "pay_wallet" && SCREEN_ERRORS.has(state.error.code));
+  // Route: the attested token and network once verified, else the option being chosen.
+  const from = state.verified
+    ? routeFrom(vm.asset?.symbol ?? option?.symbol, instructionsNetwork(c))
+    : option
+      ? routeFrom(option.symbol, optionNetwork(option))
+      : null;
+  const order: OrderParts | null = loaded
+    ? {
+        // "Review your updated total" carries the total itself.
+        lines: orderLines(vm, wide && screen !== "review_updated", summaryHead),
+        route: <PaymentRoute from={from} merchant={merchant?.name ?? null} />,
+      }
+    : null;
+  const navy = mode === "hosted";
 
   return (
     <CheckoutFrame
       variant={mode === "embed" ? "embed" : "page"}
-      merchant={merchant ? { name: merchant.name, ...(vm.description ? { subtitle: vm.description } : {}) } : undefined}
-      amount={amount}
+      merchant={wide && merchant ? { name: merchant.name, ...(site ? { subtitle: site } : {}) } : undefined}
+      amount={
+        wide && loaded ? (
+          <AmountWithLabel
+            label={summaryHead ? null : vm.description}
+            amount={<span data-testid="price">{priceNode}</span>}
+          />
+        ) : undefined
+      }
       onBack={onBack}
-      summary={summaryFor(vm, wide, merchant !== null, state.session !== null, summaryHead)}
+      summary={
+        wide && order ? (
+          <>
+            {order.lines}
+            {order.route}
+          </>
+        ) : undefined
+      }
       banner={
         vm.testMode ? (
           <Callout tone="info" title={t("app.testmode")} reference={t("app.testmodeRef")} data-testid="test-banner" />
         ) : undefined
       }
+      securedLabel={t("app.poweredBy")}
       links={mode === "hosted" ? webLinks : {}}
       className={mode === "embed" ? "ck-frame ck-frame--embed" : "ck-frame"}
     >
+      {!wide && order ? (
+        <OrderHeader
+          merchant={merchant?.name ?? null}
+          site={site}
+          title={vm.description}
+          amount={<span data-testid="price">{priceNode}</span>}
+          details={
+            <>
+              {order.lines}
+              {order.route}
+            </>
+          }
+          navy={navy}
+        />
+      ) : null}
       <div className="ck-flow" aria-busy={busy || undefined}>
         {showError && state.error ? (
           <Callout tone="danger" title={errorMessage(state.error.code, state.error.param)} live data-testid="error" />
         ) : null}
-        {TRUST_SCREENS.has(screen) ? <TrustRow vm={vm} /> : null}
+        {TRUST_SCREENS.has(screen) && state.verified ? <VerifiedMerchant vm={vm} /> : null}
         {body}
         {needsToken ? <TurnstileWidget onToken={setToken} resetKey={turnstileKey} /> : null}
         {extra}
@@ -352,67 +411,46 @@ export function CheckoutView({
   );
 }
 
+interface OrderParts {
+  readonly lines: ReactNode;
+  readonly route: ReactNode;
+}
+
 /**
- * Order summary: on desktop (two columns) the description and the Subtotal / Payment fees / Total rows;
- * on phones only the description, and only while no attested merchant subtitle carries it.
+ * Line items: the item (description, else "Purchase") at the price, then — once the instructions are
+ * attested — Payment fees and "You send" (the attested total); before that the Total is the price.
+ * Hosted invoices replace the item row with the compact invoice (`head`). With `totalId` (desktop) "You
+ * send" carries the `total-to-send` value (phones show it on the review card instead).
  */
-function summaryFor(vm: ViewModel, wide: boolean, hasMerchant: boolean, loaded: boolean, head?: ReactNode): ReactNode {
-  if (!loaded) return undefined;
-  if (!wide) {
-    return !hasMerchant && vm.description ? (
-      <p className="np-checkout__lede" data-testid="description">
-        {vm.description}
-      </p>
-    ) : undefined;
-  }
+function orderLines(vm: ViewModel, totalId: boolean, head?: ReactNode): ReactNode {
+  const price = vm.price ? <Money {...vm.price} /> : vm.priceText;
   const total = vm.total ? assetMoney(vm.total, vm.asset) : null;
-  const attested = vm.total
-    ? [
-        {
-          label: t("summary.fees"),
-          value:
-            vm.fee === "0" ? (
-              t("summary.feesNone")
-            ) : vm.fee ? (
-              <Money {...(assetMoney(vm.fee, vm.asset) ?? { amount: vm.fee, decimals: 0 })} />
-            ) : (
-              t("summary.feesIncluded")
-            ),
-        },
-        {
-          label: t("summary.totalToSend"),
-          value: total ? <Money {...total} /> : `${vm.total} base units`,
-          total: true,
-        },
-      ]
-    : [];
-  if (head) {
-    return (
-      <>
-        {head}
-        {attested.length > 0 ? (
-          <>
-            <hr className="np-divider" />
-            <KeyValueList items={attested} />
-          </>
-        ) : null}
-      </>
-    );
+  const items: KeyValueItem[] = head ? [] : [{ label: vm.description ?? t("summary.purchase"), value: price }];
+  if (vm.total) {
+    items.push({
+      label: t("summary.fees"),
+      value:
+        vm.fee === "0" ? (
+          t("summary.feesNone")
+        ) : vm.fee ? (
+          <Money {...(assetMoney(vm.fee, vm.asset) ?? { amount: vm.fee, decimals: 0 })} />
+        ) : (
+          t("summary.feesIncluded")
+        ),
+    });
+    const sent = total ? <Money {...total} /> : `${vm.total} base units`;
+    items.push({
+      label: t("summary.youSend"),
+      value: totalId ? <span data-testid="total-to-send">{sent}</span> : sent,
+      total: true,
+    });
+  } else if (!head) {
+    items.push({ label: t("summary.total"), value: price, total: true });
   }
   return (
     <>
-      {vm.description ? (
-        <h2 className="ck-summary-title" data-testid="description">
-          {vm.description}
-        </h2>
-      ) : null}
-      <hr className="np-divider" />
-      <KeyValueList
-        items={[
-          { label: t("summary.subtotal"), value: vm.price ? <Money {...vm.price} /> : vm.priceText },
-          ...attested,
-        ]}
-      />
+      {head}
+      {items.length > 0 ? <OrderLines items={items} /> : null}
     </>
   );
 }

@@ -25,9 +25,17 @@ test("wallet review: attested totals, fee note, quote countdown, change", async 
   await expect(page.getByTestId("total-to-send")).toHaveText("2.005013 USDC");
   await expect(page.getByTestId("wallet-pay")).toContainText("Your wallet may charge a separate network fee.");
   await expect(page.getByTestId("wallet-pay")).toContainText("Included in total");
-  await expect(page.getByTestId("countdown")).toContainText(/Quote refreshes in 1[45]:\d\d/);
+  await expect(page.getByTestId("countdown")).toContainText(/Price held for 1[45]:\d\d/);
   await expect(page.getByTestId("wallet-send")).toHaveText("Pay 2.005013 USDC");
+  await expect(page.getByTestId("verified-merchant")).toContainText("Payout address verified for Acme GmbH");
   await expect(page.getByTestId("verified-merchant")).toContainText("Business details declared by the merchant");
+  // Phones: the order summary is a header with an "Order details" disclosure; the pay side keeps the cards.
+  await expect(page.getByTestId("order-header")).toContainText("Acme GmbH");
+  await expect(page.getByTestId("order-details")).not.toHaveAttribute("open", "");
+  await expect(page.getByTestId("change-network")).toContainText("Base");
+  await expect(page.getByTestId("change-option")).toContainText("USDC");
+  await expect(page.getByTestId("review-wallet")).toContainText("connected");
+  await expect(page.getByTestId("use-manual")).toHaveText("Pay from another wallet or exchange");
   await a11yBasics(page);
   await page.getByTestId("change-option").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();
@@ -140,7 +148,14 @@ test("dark theme and desktop two-column review", async ({ page, mock }) => {
   await toReview(page);
   await expect(page.locator(".np-checkout--with-summary")).toBeVisible();
   await expect(page.getByTestId("use-manual")).toBeVisible();
-  // The theme background covers the whole viewport: desktop canvas (#102c30) on html and body…
+  // Desktop split: the navy order side carries "You send" and the route; the fee card leaves "You send" out.
+  await expect(page.locator(".np-checkout__summary.np-surface-navy")).toContainText("How your payment travels");
+  await expect(page.locator(".np-checkout__summary")).toContainText("USDC on Base");
+  await expect(page.locator(".np-checkout__summary")).toContainText("Acme GmbH's wallet");
+  await expect(page.getByTestId("total-to-send")).toHaveText("2.005013 USDC");
+  await expect(page.getByTestId("fee-card")).not.toContainText("You send");
+  await expect(page.getByTestId("order-header")).toHaveCount(0);
+  // The theme background covers the whole viewport: desktop canvas (#0b1a2c) on html and body…
   const bgs = () =>
     page.evaluate(() => ({
       html: getComputedStyle(document.documentElement).backgroundColor,
@@ -148,10 +163,10 @@ test("dark theme and desktop two-column review", async ({ page, mock }) => {
       bottom: document.elementFromPoint(5, window.innerHeight - 2)?.closest("html") !== null,
       covers: document.documentElement.getBoundingClientRect().height >= window.innerHeight,
     }));
-  expect(await bgs()).toEqual({ html: "rgb(16, 44, 48)", body: "rgb(16, 44, 48)", bottom: true, covers: true });
-  // …and the dark surface (#193a3f) on phones.
+  expect(await bgs()).toEqual({ html: "rgb(11, 26, 44)", body: "rgb(11, 26, 44)", bottom: true, covers: true });
+  // …and the dark surface (#12263f) on phones.
   await page.setViewportSize({ width: 390, height: 1400 });
-  expect(await bgs()).toMatchObject({ html: "rgb(25, 58, 63)", body: "rgb(25, 58, 63)", covers: true });
+  expect(await bgs()).toMatchObject({ html: "rgb(18, 38, 63)", body: "rgb(18, 38, 63)", covers: true });
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByTestId("use-manual").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();

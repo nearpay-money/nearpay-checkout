@@ -136,6 +136,16 @@ export function ScreenTitle({ title, lede, id }: { title: ReactNode; lede?: Reac
   );
 }
 
+/** "● Mock Wallet 0x4De0…7559 connected · balance covers the network fee" (design v2 wallet line). */
+export function WalletLine({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <p className="ck-wallet-line" data-testid={testId}>
+      <span className="ck-wallet-line__dot" aria-hidden="true" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
 /** Copies a value; the result is announced politely; on failure the value is spelled out. */
 export function CopyTextButton({
   value,

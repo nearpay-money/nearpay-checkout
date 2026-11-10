@@ -1,13 +1,18 @@
 /**
- * Wallet path after sentinel verification (§4 pay_wallet, §5.4): the review frame (token card with
- * Change, Purchase / Payment fees / Total to send, wallet network-fee note, Pay, quote countdown) and
- * its variants: updated total after a re-quote, test mode ("Try a payment" + Simulate payment, never a
- * broadcast — §5.8), approve in your wallet, not approved, not enough funds. Every amount shown is the
- * ATTESTED one.
+ * Wallet path after sentinel verification (§4 pay_wallet, §5.4): the review frame and its variants:
+ * updated total after a re-quote, test mode ("Try a payment" + Simulate payment, never a broadcast —
+ * §5.8), approve in your wallet, not approved, not enough funds. Every amount shown is the ATTESTED one.
+ *
+ * Design v2 review ("Pay with"): Network and Token cards (the chosen option, with the wallet balance;
+ * tapping either is the former "Change"), the connected-wallet line with the network-fee pre-check
+ * verdict, the fee card (Merchant receives / Routing fee / Network fee, plus "You send" on phones where
+ * the order summary is collapsed), "Pay <amount>", "Pay from another wallet or exchange" and the
+ * price-hold countdown.
  */
 
 import { formatBaseUnits } from "@nearpay/spec";
 import {
+  Avatar,
   Button,
   Callout,
   ClockIcon,
@@ -16,6 +21,7 @@ import {
   type KeyValueItem,
   KeyValueList,
   Money,
+  PickerTrigger,
   SelectionCard,
   WalletIcon,
   WarningIcon,
@@ -28,7 +34,7 @@ import { chainName, getChain } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { assetMoney } from "../../lib/money/display";
 import { roundUpSignificant } from "../../lib/money/format";
-import { ScreenTitle, StateScreen } from "../../ui/blocks";
+import { ScreenTitle, StateScreen, WalletLine } from "../../ui/blocks";
 import { shortAddress } from "../wallet-connect/wallets";
 
 /** Splits a message around `{time}` so a live `<Countdown>` can sit inside the sentence. */
@@ -60,46 +66,83 @@ function network(c: Checkout): string {
   return a.kind === "intents_transfer" ? "NEAR Intents" : chainName(a.deposit?.chain ?? "");
 }
 
-function Selection({ c, vm, disabled }: { c: Checkout; vm: ViewModel; disabled: boolean }) {
-  const w = c.state.wallet;
+/**
+ * The chosen option as the "Pay with" cards (kit `PickerTrigger` look): Network and Token, the token
+ * with the wallet's balance. Either card goes back to the choice (the former "Change", `change`).
+ */
+function ReviewPickers({
+  c,
+  vm,
+  balance,
+  disabled,
+}: {
+  c: Checkout;
+  vm: ViewModel;
+  balance: string | null;
+  disabled: boolean;
+}) {
   const symbol = vm.asset?.symbol ?? c.state.option?.symbol ?? "";
+  const net = network(c);
+  const tokenValue = balance ? `${symbol}, ${t("asset.balanceLabel")} ${balance}` : symbol;
   return (
-    <SelectionCard
-      avatar={symbol || "?"}
-      title={`${symbol} · ${network(c)}`}
-      description={w ? t("wallet.address", { address: shortAddress(w.address) }) : undefined}
-      action={
-        <button
-          type="button"
-          className="np-link-button"
-          onClick={c.actions.change}
-          disabled={disabled}
-          data-testid="change-option"
-        >
-          {t("review.change")}
-        </button>
-      }
-    />
+    <div className="np-pickers ck-review-pickers">
+      <PickerTrigger
+        caption={t("asset.network")}
+        value={net}
+        avatar={<Avatar initial={net || "?"} size="sm" />}
+        onClick={c.actions.change}
+        disabled={disabled}
+        aria-label={t("review.changeTrigger", { caption: t("asset.network"), value: net })}
+        data-testid="change-network"
+      />
+      <PickerTrigger
+        caption={t("asset.token")}
+        value={symbol}
+        avatar={<Avatar initial={symbol || "?"} size="sm" />}
+        balance={balance ?? undefined}
+        selected
+        onClick={c.actions.change}
+        disabled={disabled}
+        aria-label={t("review.changeTrigger", { caption: t("asset.token"), value: tokenValue })}
+        data-testid="change-option"
+      />
+    </div>
   );
 }
 
-function Totals({ c, vm, compact = false }: { c: Checkout; vm: ViewModel; compact?: boolean }) {
-  // Desktop: the order summary column carries the breakdown; the review card shows what is sent.
-  // Phones: "Total to send" stays visible; Purchase and Payment fees move into a disclosure.
-  const total: KeyValueItem = compact
-    ? { label: t("summary.youSend"), value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span> }
-    : {
-        label: t("summary.totalToSend"),
-        value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span>,
-        total: true,
-      };
-  const breakdown: KeyValueItem[] = [
+/** "Mock Wallet 0x4De0…7559 connected · balance covers the network fee" (pre-check verdict when known). */
+function WalletStatus({ c }: { c: Checkout }) {
+  const w = c.state.wallet;
+  if (!w) return null;
+  const intents = c.state.verified?.attestation.kind === "intents_transfer";
+  const fee = intents
+    ? t("review.feeNone")
+    : c.gas?.state === "ok"
+      ? t("review.feeCovered")
+      : c.gas?.state === "checking"
+        ? t("review.feeChecking")
+        : null;
+  const line = t("review.walletShort", { address: shortAddress(w.address) });
+  return <WalletLine testId="review-wallet">{fee ? `${line} · ${fee}` : line}</WalletLine>;
+}
+
+/**
+ * Fee card: Merchant receives (the price), Routing fee (the payer fee when known: attested for Intents
+ * transfers, `fee_amount` checked against the attested total for route quotes — else "Included in
+ * total"), Network fee (paid by the wallet, which shows it before approval). Phones add "You send"
+ * (the attested total): their order summary is collapsed. The network-fee note keeps the chain switch
+ * and Solana rent details.
+ */
+function FeeCard({ c, vm, wide }: { c: Checkout; vm: ViewModel; wide: boolean }) {
+  const att = c.state.verified?.attestation;
+  const intents = att?.kind === "intents_transfer";
+  const rows: KeyValueItem[] = [
     {
-      label: t("summary.purchase"),
+      label: t("fees.merchant"),
       value: <span data-testid="purchase">{vm.price ? <Money {...vm.price} /> : vm.priceText}</span>,
     },
     {
-      label: t("summary.fees"),
+      label: t("fees.routing"),
       value:
         vm.fee === "0" ? (
           <span data-testid="payment-fees">{t("summary.feesNone")}</span>
@@ -109,27 +152,26 @@ function Totals({ c, vm, compact = false }: { c: Checkout; vm: ViewModel; compac
           <span className="np-text-secondary">{t("summary.feesIncluded")}</span>
         ),
     },
+    intents
+      ? { label: t("fees.networkIntents"), value: t("fees.networkNone") }
+      : { label: t("fees.network"), value: <span className="np-text-secondary">{t("fees.networkWallet")}</span> },
   ];
-  const att = c.state.verified?.attestation;
+  if (!wide) {
+    rows.push({
+      label: t("summary.youSend"),
+      value: <span data-testid="total-to-send">{amountNode(vm.total, vm)}</span>,
+      total: true,
+    });
+  }
   const evm = att?.kind === "route_quote" && att.deposit && getChain(att.deposit.chain)?.family === "evm";
   const sol = c.state.wallet?.family === "solana";
   const rent = c.solana?.state === "ready" ? c.solana.rentLamports : null;
   return (
-    <div className="np-stack np-stack--sm">
-      {compact ? null : (
-        <details className="ck-disclosure" data-testid="fee-details">
-          <summary className="ck-disclosure__summary">{t("review.feeDetails")}</summary>
-          <KeyValueList items={breakdown} />
-        </details>
-      )}
-      <KeyValueList items={[total]} />
+    <div className="ck-fees" data-testid="fee-card">
+      <KeyValueList className="ck-fees__rows" items={rows} />
       {/* With a network-fee warning on screen, the generic fee note would only repeat it. */}
-      <p className="np-checkout__note" data-testid="network-fee-note" hidden={c.gas?.state === "short"}>
-        {att?.kind === "intents_transfer"
-          ? t("review.intentsFee")
-          : sol
-            ? t("review.solanaFee")
-            : t("review.walletFee")}
+      <p className="ck-fees__note" data-testid="network-fee-note" hidden={c.gas?.state === "short"}>
+        {intents ? t("review.intentsFee") : sol ? t("review.solanaFee") : t("review.walletFee")}
         {evm && att?.deposit ? ` ${t("review.switchChain", { chain: chainName(att.deposit.chain) })}` : ""}
         {rent ? ` ${t("review.solanaRent", { amount: `${formatBaseUnits(rent, 9)} SOL` })}` : ""}
       </p>
@@ -141,7 +183,7 @@ function QuoteNote({ c }: { c: Checkout }) {
   const until = c.state.verified?.validUntil;
   if (!until) return null;
   return (
-    <p className="np-checkout__note ck-center" data-testid="countdown">
+    <p className="np-checkout__note ck-center ck-hold" data-testid="countdown">
       {withCountdown(t("review.quote"), until)}
     </p>
   );
@@ -186,6 +228,7 @@ export function WalletPay({
   vm,
   screen,
   wide,
+  balance = null,
   onManual,
 }: {
   c: Checkout;
@@ -200,8 +243,10 @@ export function WalletPay({
     | "not_enough_funds"
     | "tx_failed"
   >;
-  /** Desktop review: also offer "Send from another wallet". */
+  /** Desktop split layout: the order side shows "You send", so the fee card leaves it out. */
   wide: boolean;
+  /** Formatted wallet balance of the chosen token (read on "Pay with"), if known. */
+  balance?: string | null;
   /** Switch to the deposit-address path (keeps the chosen token preselected). */
   onManual: () => void;
 }) {
@@ -305,11 +350,13 @@ export function WalletPay({
     return (
       <section className="ck-screen" data-testid="wallet-pay" aria-labelledby="ck-test-title">
         <ScreenTitle id="ck-test-title" title={t("test.title")} lede={t("test.body")} />
-        <Selection c={c} vm={vm} disabled={busy} />
-        <Totals c={c} vm={vm} />
-        <div className="np-stack">
+        <ReviewPickers c={c} vm={vm} balance={null} disabled={busy} />
+        <WalletStatus c={c} />
+        <FeeCard c={c} vm={vm} wide={wide} />
+        <div className="np-stack ck-pay-actions">
           <Button
             fullWidth
+            size="lg"
             onClick={() => void actions.simulate()}
             loading={busy}
             loadingText={t("test.simulating")}
@@ -344,9 +391,10 @@ export function WalletPay({
         {gasShort ? (
           <GasWarning c={c} onManual={onManual} />
         ) : (
-          <div className="np-stack">
+          <div className="np-stack ck-pay-actions">
             <Button
               fullWidth
+              size="lg"
               onClick={() => void actions.payWithWallet()}
               loading={c.preparing}
               loadingText={t("gas.checking")}
@@ -363,12 +411,15 @@ export function WalletPay({
 
   const sol = c.solana;
   return (
-    <section className="ck-screen" data-testid="wallet-pay" aria-labelledby="ck-review-title">
-      <h1 className={wide ? "ck-review-title" : "np-sr-only"} id="ck-review-title">
+    <section className="ck-screen ck-review" data-testid="wallet-pay" aria-labelledby="ck-review-title">
+      <h1 className="np-checkout__title" id="ck-review-title">
         {t("review.title")}
       </h1>
-      <Selection c={c} vm={vm} disabled={busy} />
-      <Totals c={c} vm={vm} compact={wide} />
+      <div className="ck-review__choice">
+        <ReviewPickers c={c} vm={vm} balance={balance} disabled={busy} />
+        <WalletStatus c={c} />
+      </div>
+      <FeeCard c={c} vm={vm} wide={wide} />
       {sol?.state === "manual" ? (
         <Callout tone="warning" title={t("review.solanaManualTitle")} live data-testid="solana-manual-only">
           {t(`review.solanaManual.${sol.reason}`)}
@@ -379,18 +430,19 @@ export function WalletPay({
       {gasShort ? (
         <GasWarning c={c} onManual={onManual} />
       ) : (
-        <div className="np-stack">
+        <div className="np-stack ck-pay-actions">
           {sol?.state === "manual" ? (
-            <Button fullWidth onClick={actions.useManual} data-testid="use-manual">
+            <Button fullWidth size="lg" onClick={actions.useManual} data-testid="use-manual">
               {t("txFailed.manual")}
             </Button>
           ) : sol?.state === "error" ? (
-            <Button fullWidth onClick={c.retrySolana} data-testid="solana-retry">
+            <Button fullWidth size="lg" onClick={c.retrySolana} data-testid="solana-retry">
               {t("review.solanaRetry")}
             </Button>
           ) : (
             <Button
               fullWidth
+              size="lg"
               onClick={() => void actions.payWithWallet()}
               loading={sol?.state === "checking" || c.preparing}
               loadingText={c.preparing ? t("gas.checking") : t("review.solanaChecking")}
@@ -399,7 +451,7 @@ export function WalletPay({
               {payLabel}
             </Button>
           )}
-          {wide && sol?.state !== "manual" ? (
+          {sol?.state !== "manual" ? (
             <Button fullWidth variant="secondary" onClick={actions.useManual} data-testid="use-manual">
               {t("review.sendAnother")}
             </Button>

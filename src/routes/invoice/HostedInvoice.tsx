@@ -35,6 +35,7 @@ import {
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import { CheckoutView } from "../../app/CheckoutView";
+import { WIDE_QUERY } from "../../app/OrderSummary";
 import { linkSessionPath } from "../../app/route";
 import { LoadingScreen } from "../../app/StatusScreens";
 import { useCheckout } from "../../app/useCheckout";
@@ -178,6 +179,7 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
   };
 
   useFocusTitle(st.kind);
+  const wide = useMediaQuery(WIDE_QUERY);
 
   if (st.kind === "paying") {
     return (
@@ -206,7 +208,7 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
 
   if (st.kind !== "ready") {
     return (
-      <CheckoutFrame links={webLinks} className="ck-frame">
+      <CheckoutFrame links={webLinks} securedLabel={t("app.poweredBy")} className="ck-frame">
         <div className="ck-flow">
           {st.kind === "loading" ? (
             <LoadingScreen label={t("invoice.loading")} />
@@ -233,9 +235,11 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
   const inv = st.invoice;
   const view = invoiceStatus(inv, Date.now());
   const banner = InvoiceStatusCallout({ invoice: inv, view, justPaid });
+  // Design v2: the document is the navy order side from 960 px; phones show it (on white) above the actions.
   return (
     <CheckoutFrame
-      summary={<InvoiceDocument invoice={inv} view={view} />}
+      summary={wide ? <InvoiceDocument invoice={inv} view={view} /> : undefined}
+      securedLabel={t("app.poweredBy")}
       banner={
         !inv.livemode || banner ? (
           <div className="np-stack np-stack--sm">
@@ -255,6 +259,7 @@ export function HostedInvoice({ id, secret }: { id: string; secret: string }) {
       className="ck-frame ck-invoice"
       data-testid="invoice-page"
     >
+      {wide ? null : <InvoiceDocument invoice={inv} view={view} />}
       <div className="ck-flow">
         <InvoiceActions
           invoice={inv}
@@ -285,7 +290,7 @@ function NotFoundScreen() {
 /** Malformed `/i/` link (bad id, missing or foreign secret): identical to a wrong secret (no oracle). */
 export function InvoiceNotFound() {
   return (
-    <CheckoutFrame links={webLinks} className="ck-frame">
+    <CheckoutFrame links={webLinks} securedLabel={t("app.poweredBy")} className="ck-frame">
       <div className="ck-flow">
         <NotFoundScreen />
       </div>
@@ -605,7 +610,6 @@ function InvoiceCheckout({
   onRestart: () => void;
 }) {
   const c = useCheckout({ sessionId: session.id, secret: session.secret });
-  const wide = useMediaQuery("(min-width: 880px)");
   const view = invoiceStatus(invoice, Date.now());
   const paid: JustPaid = {
     merchant: c.trusted?.attestation.merchant.name ?? null,
@@ -616,7 +620,7 @@ function InvoiceCheckout({
       c={c}
       mode="hosted"
       onCancel={onBack}
-      summaryHead={wide ? <InvoiceDocument invoice={invoice} view={view} compact /> : undefined}
+      summaryHead={<InvoiceDocument invoice={invoice} view={view} compact />}
       completeActions={
         <Button fullWidth onClick={() => onViewInvoice(paid)} data-testid="view-invoice">
           {t("invoice.viewInvoice")}
@@ -652,9 +656,10 @@ function InvoiceCheckout({
  */
 /** Auto-pay screens: the compact invoice in the desktop summary column (as during payment). */
 function AutoPayFrame({ invoice, children }: { invoice: Invoice; children: ReactNode }) {
-  const wide = useMediaQuery("(min-width: 880px)");
+  const wide = useMediaQuery(WIDE_QUERY);
   return (
     <CheckoutFrame
+      securedLabel={t("app.poweredBy")}
       summary={
         wide ? <InvoiceDocument invoice={invoice} view={invoiceStatus(invoice, Date.now())} compact /> : undefined
       }
