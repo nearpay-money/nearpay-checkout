@@ -27,7 +27,7 @@ test("wallet review: attested totals, fee note, quote countdown, change", async 
   await expect(page.getByTestId("wallet-pay")).toContainText("Included in total");
   await expect(page.getByTestId("countdown")).toContainText(/Quote refreshes in 1[45]:\d\d/);
   await expect(page.getByTestId("wallet-send")).toHaveText("Pay 2.005013 USDC");
-  await expect(page.getByTestId("verified-merchant")).toContainText("Business details reviewed by NearPay");
+  await expect(page.getByTestId("verified-merchant")).toContainText("Business details declared by the merchant");
   await a11yBasics(page);
   await page.getByTestId("change-option").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();

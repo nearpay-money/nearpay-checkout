@@ -1,7 +1,8 @@
 /**
  * The ATTESTED merchant and destination (§5.2): a compact trust row on the instructions screens and the
- * "Payment details" sheet (merchant, "Business details reviewed by NearPay", payment destination,
- * destination fingerprint). Business details are self-declared and reviewed by NearPay ops, so the copy
+ * "Payment details" sheet (merchant, "Business details declared by the merchant", payment destination,
+ * destination fingerprint). Business details are self-declared and go live without a NearPay review
+ * (open onboarding, ADR-0024), so the copy
  * never claims a verified identity (ADR-0020, design-system §6.3). The fingerprint keeps the format the
  * merchant sees in the dashboard (`XXXX-XXXX-XX`) so the two can be compared character by character.
  */

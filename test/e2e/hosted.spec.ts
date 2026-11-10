@@ -46,12 +46,12 @@ test("manual path in test mode: verified merchant, guarded address, simulate, su
   await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
   await page.getByTestId("continue").click();
 
-  // Attested merchant in the header; "Payment details" sheet with the reviewed badge and fingerprint.
+  // Attested merchant in the header; "Payment details" sheet with the declared badge and fingerprint.
   await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
   await page.getByTestId("payment-details").click();
   await expect(page.getByRole("dialog", { name: "Payment details" })).toBeVisible();
   await expect(page.getByTestId("merchant-name")).toHaveText("Acme GmbH");
-  await expect(page.getByTestId("kyb")).toHaveText("Business details reviewed by NearPay");
+  await expect(page.getByTestId("kyb")).toHaveText("Business details declared by the merchant");
   await expect(page.getByTestId("fingerprint")).toHaveText("YZMN-R81Z-BR");
   await expect(page.getByTestId("destination")).toHaveText("USDC · NEAR");
   await page.keyboard.press("Escape");
