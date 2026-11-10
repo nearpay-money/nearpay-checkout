@@ -4,7 +4,9 @@
  * `eth_getBalance`) and only when the wallet is on that chain; NEAR (`ft_balance_of`, native) and
  * NEAR Intents (`mt_balance_of` on intents.near) through the configured NEAR RPC; Solana
  * (`getBalance`, `getTokenAccountsByOwner`) through the configured Solana RPC. No new hosts (CSP).
- * Any failed read rejects: the picker then falls back to the full list.
+ * A failed read leaves that option's balance unknown (`null`: listed as "Balance unavailable", still
+ * selectable, never hidden as if empty); when every read fails (or the chain can't be read) it rejects
+ * and the picker falls back to the full list.
  */
 import { INTENTS_CONTRACT } from "@nearpay/spec";
 import type { Option } from "../../app/machine";
@@ -67,6 +69,7 @@ export async function readBalances(w: WalletHandle, options: readonly Option[], 
         return (await spl).get(t.mint) ?? "0";
     }
   };
-  const read = await Promise.all(targets.map(async ([key, t]) => [key, await one(t)] as const));
+  const read = await Promise.all(targets.map(async ([key, t]) => [key, await one(t).catch(() => null)] as const));
+  if (read.every(([, v]) => v === null)) throw new Error("no balance could be read");
   return { state: "ok", balances: new Map(read) };
 }

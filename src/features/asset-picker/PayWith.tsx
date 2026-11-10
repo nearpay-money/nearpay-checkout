@@ -10,7 +10,7 @@
  * Continue: the wallet path prepares the payment (attempt + sentinel verification → review), the
  * manual path opens "Send from another wallet".
  */
-import { Button, formatMoney, Skeleton, StatusBadge } from "@nearpay-internal/ui";
+import { Button, Skeleton, StatusBadge } from "@nearpay-internal/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectedWallet, Option } from "../../app/machine";
 import type { WalletReads } from "../../app/useCheckout";
@@ -19,8 +19,8 @@ import { hasMessage, t } from "../../lib/i18n/t";
 import { ScreenTitle } from "../../ui/blocks";
 import { Picker, type PickerItem } from "../../ui/Picker";
 import { shortAddress } from "../wallet-connect/wallets";
-import { networkKey, networksOf, optionKey, optionNetwork } from "./options";
-import { type BalanceRead, formatBalance, rowSelectable, type TokenRow, tokenRows } from "./tokens";
+import { defaultNetwork, INTENTS_NETWORK, networkKey, networksOf, optionKey, optionNetwork } from "./options";
+import { type BalanceRead, formatBalance, formatNeeded, rowSelectable, type TokenRow, tokenRows } from "./tokens";
 
 /** Balance reads that take longer fall back to the full list. */
 export const BALANCE_TIMEOUT_MS = 8000;
@@ -30,8 +30,9 @@ const POPULAR = 4;
 
 type Balance = { readonly state: "loading" } | { readonly state: "error" } | BalanceRead;
 
+/** Indicative amount, 6 significant digits rounded up (never understated). */
 const estimateText = (o: Option): string | null =>
-  o.estimated_amount_in ? formatMoney({ amount: o.estimated_amount_in, decimals: o.decimals, symbol: o.symbol }) : null;
+  o.estimated_amount_in ? formatNeeded(o.estimated_amount_in, o.decimals, o.symbol) : null;
 
 function unavailableText(o: Option): string {
   const key = `asset.unavailable.${o.reason ?? "route_unavailable"}`;
@@ -40,18 +41,26 @@ function unavailableText(o: Option): string {
 
 function rowDescription(r: TokenRow): string {
   const o = r.option;
-  if (!o.available) return unavailableText(o);
-  const est = estimateText(o);
+  // Intents transfers are paid from the NEAR Intents balance, never from the wallet's own tokens: every
+  // line of such a row says so (also "Not enough", which otherwise reads like a wallet balance).
   const prefix = o.method === "intents_transfer" ? `${t("asset.intents")} · ` : "";
-  if (r.short && est) return `${t("asset.notEnough")} · ${t("asset.needed", { amount: est })}`;
+  if (!o.available) return `${prefix}${unavailableText(o)}`;
+  const est = estimateText(o);
+  if (r.short && est) return `${prefix}${t("asset.notEnough")} · ${t("asset.needed", { amount: est })}`;
   return `${prefix}${est ? t("asset.estimate", { amount: `≈ ${est}` }) : t("asset.estimateUnknown")}`;
+}
+
+function rowLabel(r: TokenRow): string {
+  const o = r.option;
+  if (r.balance !== null) return `${o.symbol} · ${formatBalance(r.balance, o.decimals)}`;
+  return r.unavailable ? `${o.symbol} · ${t("asset.balanceUnavailable")}` : o.symbol;
 }
 
 function tokenItem(r: TokenRow, network: string): PickerItem {
   const o = r.option;
   return {
     value: optionKey(o),
-    label: r.balance !== null ? `${o.symbol} · ${formatBalance(r.balance, o.decimals)}` : o.symbol,
+    label: rowLabel(r),
     triggerLabel: o.symbol,
     avatar: o.symbol,
     description: rowDescription(r),
@@ -89,7 +98,6 @@ export function PayWith({
   const all = useMemo(() => options ?? [], [options]);
   const networks = useMemo(() => networksOf(all), [all]);
   const prefer = preferKey ? (all.find((o) => optionKey(o) === preferKey && o.available) ?? null) : null;
-  const firstUsable = all.find((o) => o.available) ?? null;
   const [network, setNetwork] = useState<string | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -97,16 +105,9 @@ export function PayWith({
   const [readRun, setReadRun] = useState(0);
   const cache = useRef(new Map<string, BalanceRead>());
 
-  const net =
-    network !== null && networks.some((n) => n.key === network)
-      ? network
-      : prefer
-        ? networkKey(prefer)
-        : firstUsable
-          ? networkKey(firstUsable)
-          : (networks[0]?.key ?? null);
+  const net = network !== null && networks.some((n) => n.key === network) ? network : defaultNetwork(all, prefer);
   const netOptions = useMemo(() => all.filter((o) => networkKey(o) === net), [all, net]);
-  const netLabel = networks.find((n) => n.key === net)?.label ?? "";
+  const netLabel = net === INTENTS_NETWORK ? t("network.intents") : (networks.find((n) => n.key === net)?.label ?? "");
 
   // ---- wallet balances of the chosen network (cached per network) --------------------------------------
   useEffect(() => {
@@ -163,7 +164,7 @@ export function PayWith({
       if (available) usable += 1;
       return {
         value: n.key,
-        label: n.label,
+        label: n.key === INTENTS_NETWORK ? t("network.intents") : n.label,
         description: available ? symbols.join(", ") : unavailableText(opts[0] as Option),
         keywords: [...symbols, n.key],
         disabled: !available,
@@ -229,7 +230,9 @@ export function PayWith({
             triggerDescription={
               selectedRow?.balance != null && selected
                 ? t("asset.balance", { amount: formatBalance(selectedRow.balance, selected.decimals) })
-                : undefined
+                : selectedRow?.unavailable
+                  ? t("asset.balanceUnavailable")
+                  : undefined
             }
             placeholder={t("asset.tokenPlaceholder")}
             searchLabel={t("asset.tokenSearch")}

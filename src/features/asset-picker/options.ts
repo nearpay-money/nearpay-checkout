@@ -50,19 +50,39 @@ export function optionNetwork(o: Option): string {
 /** "USDC · Base" — full token and network identity (design-system §1.3). */
 export const optionTitle = (o: Option): string => `${o.symbol} · ${optionNetwork(o)}`;
 
+/** Network key of NEAR Intents balance transfers. */
+export const INTENTS_NETWORK = "intents";
+
 /** Filter key of an option's network (intents transfers are their own network). */
-export const networkKey = (o: Option): string => (o.method === "intents_transfer" ? "intents" : o.chain);
+export const networkKey = (o: Option): string => (o.method === "intents_transfer" ? INTENTS_NETWORK : o.chain);
 
 export interface NetworkChoice {
   readonly key: string;
   readonly label: string;
 }
 
-/** Networks present in the option list, in first-seen order (the server ranks options best first). */
+/**
+ * Networks present in the option list, in first-seen order (the server ranks options best first), the
+ * NEAR Intents balance last: it is not a chain the connected wallet holds tokens on, so it never sits
+ * among (or ahead of) the wallet's networks.
+ */
 export function networksOf(options: readonly Option[]): NetworkChoice[] {
   const seen = new Map<string, string>();
   for (const o of options) if (!seen.has(networkKey(o))) seen.set(networkKey(o), optionNetwork(o));
-  return [...seen].map(([key, label]) => ({ key, label }));
+  const list = [...seen].map(([key, label]) => ({ key, label }));
+  return [...list.filter((n) => n.key !== INTENTS_NETWORK), ...list.filter((n) => n.key === INTENTS_NETWORK)];
+}
+
+/**
+ * Network preselected in "Pay with": the preferred option's, else the first usable on-chain option's
+ * (the server lists the Intents transfer first, but a wallet's tokens live on chains; the NEAR Intents
+ * balance is one pick away), else the first usable option's, else the first network.
+ */
+export function defaultNetwork(options: readonly Option[], prefer: Option | null): string | null {
+  if (prefer) return networkKey(prefer);
+  const usable = options.filter((o) => o.available);
+  const first = usable.find((o) => o.method !== "intents_transfer") ?? usable[0];
+  return first ? networkKey(first) : (networksOf(options)[0]?.key ?? null);
 }
 
 const norm = (s: string): string =>

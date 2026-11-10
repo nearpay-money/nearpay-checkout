@@ -93,6 +93,7 @@ export const en = {
   "asset.unavailable.pricing_unavailable": "Price unavailable",
   "asset.notEnough": "Not enough",
   "asset.balance": "Balance {amount}",
+  "asset.balanceUnavailable": "Balance unavailable",
   "asset.needed": "{amount} needed",
   "asset.showAll": "Show all tokens",
   "asset.showHeld": "Show only tokens in this wallet",
@@ -110,6 +111,7 @@ export const en = {
   "network.popular": "Popular",
   "network.more": "More networks",
   "network.unavailable": "Not available for this payment",
+  "network.intents": "NEAR Intents balance",
 
   "noOptions.title": "Try another wallet or currency",
   "noOptions.callout": "No payment options available",

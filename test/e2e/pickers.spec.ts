@@ -6,7 +6,18 @@ import type { Page } from "@playwright/test";
 import { USDC_BASE } from "../support/sessions";
 import { a11yBasics } from "./support/a11y";
 import { expect, test } from "./support/fixtures";
-import { BASE_OPTIONS, ETH_BASE, hex, MANY, omft, RICH, USDT } from "./support/options";
+import {
+  BASE_OPTIONS,
+  ETH_BASE,
+  hex,
+  MANY,
+  omft,
+  PROD_OPTIONS,
+  PROD_PAYER_READS,
+  RICH,
+  USDC,
+  USDT,
+} from "./support/options";
 import { choose, chooseNetwork } from "./support/pay";
 import { injectEvmWallet, injectNearWallet, stubNearRpc } from "./support/wallets";
 
@@ -136,6 +147,63 @@ test("EVM wallet: only tokens it holds, with balances, by value; Not enough; Sho
   const calls = await evmCalls(page);
   expect(calls.filter((m) => m === "eth_call")).toHaveLength(3);
   expect(calls).toContain("eth_getBalance");
+});
+
+test("live-beta regression: MetaMask on Base lists USDC and ETH from the wallet; the Intents balance stays apart", async ({
+  page,
+  mock,
+}) => {
+  await injectEvmWallet(page, { chainId: "0x2105", reads: PROD_PAYER_READS });
+  const nearRpc = await stubNearRpc(page, false, { mt: { [ETH_BASE]: "123456789" } }); // Intents dust
+  const s = mock.create({ livemode: true }, { options: PROD_OPTIONS });
+  await connectEvm(page, mock.url(s));
+  // The wallet's chain is preselected, not the Intents transfer the server lists first.
+  await expect(page.getByTestId("network-picker-trigger")).toContainText("Base");
+  await expect(page.getByTestId("token-picker-trigger")).toContainText("Balance 0.00156285");
+  await page.getByTestId("token-picker-trigger").click();
+  const rows = page.getByTestId("token-picker-list").getByRole("option");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("ETH · 0.00156285");
+  await expect(rows.nth(0)).toContainText("≈ 0.000481721 ETH · includes fees");
+  await expect(rows.nth(1)).toContainText("USDC · 4.52101");
+  await expect(rows.nth(1)).toContainText("≈ 1.52 USDC");
+  await expect(page.getByTestId(`option-intents_transfer-${ETH_BASE}`)).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  expect(nearRpc).not.toContain("mt_balance_of"); // nothing read from Intents for the Base list
+
+  // The NEAR Intents balance is its own network, listed last and labelled; its dust is its own.
+  await page.getByTestId("network-picker-trigger").click();
+  const nets = page.getByTestId("network-picker-list").getByRole("option");
+  await expect(nets).toHaveCount(2);
+  await expect(nets.nth(1)).toContainText("NEAR Intents balance");
+  await nets.nth(1).click();
+  await page.getByTestId("token-picker-trigger").click();
+  const intents = page.getByTestId(`option-intents_transfer-${ETH_BASE}`);
+  await expect(intents).toContainText("ETH · < 0.000001");
+  await expect(intents).toContainText("From your NEAR Intents balance · Not enough · 0.000481721 ETH needed");
+  await expect(intents).toHaveAttribute("aria-disabled", "true");
+  await page.keyboard.press("Escape");
+  expect(nearRpc).toContain("mt_balance_of");
+});
+
+test("a token whose balance read fails is listed as 'Balance unavailable' and stays selectable", async ({
+  page,
+  mock,
+}) => {
+  await injectEvmWallet(page, { chainId: "0x2105", reads: { ...PROD_PAYER_READS, tokens: { [USDC]: "error" } } });
+  const s = mock.create({ livemode: true }, { options: PROD_OPTIONS });
+  await connectEvm(page, mock.url(s));
+  await expect(page.getByTestId("balances-error")).toHaveCount(0);
+  await page.getByTestId("token-picker-trigger").click();
+  const rows = page.getByTestId("token-picker-list").getByRole("option");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(0)).toContainText("ETH · 0.00156285");
+  const usdc = page.getByTestId(`option-route_quote-${omft(USDC)}`);
+  await expect(usdc).toContainText("USDC · Balance unavailable");
+  await expect(usdc).not.toHaveAttribute("aria-disabled", "true");
+  await usdc.click();
+  await expect(page.getByTestId("token-picker-trigger")).toContainText("Balance unavailable");
+  await expect(page.getByTestId("asset-continue")).toBeEnabled();
 });
 
 test("EVM wallet on another chain: switch to read balances; read errors fall back to the full list", async ({

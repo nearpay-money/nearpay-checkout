@@ -3,10 +3,16 @@ import { INTENTS_CONTRACT } from "@nearpay/spec";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Option } from "../../src/app/machine";
 import { readBalances } from "../../src/features/asset-picker/balance-reads";
-import { optionKey } from "../../src/features/asset-picker/options";
-import { balanceTarget, formatBalance, rowSelectable, tokenRows } from "../../src/features/asset-picker/tokens";
+import { defaultNetwork, networksOf, optionKey } from "../../src/features/asset-picker/options";
+import {
+  balanceTarget,
+  formatBalance,
+  formatNeeded,
+  rowSelectable,
+  tokenRows,
+} from "../../src/features/asset-picker/tokens";
 import type { WalletHandle } from "../../src/features/wallet-connect/wallets";
-import { roundUpSignificant } from "../../src/lib/money/format";
+import { formatSignificant, roundUpSignificant } from "../../src/lib/money/format";
 import type { Eip1193Provider } from "../../src/wallets/evm/provider";
 import { availableNear, ftBalanceOf, gasPrice, mtBalanceOf } from "../../src/wallets/near/balances";
 import { solBalance, splBalances } from "../../src/wallets/solana/balances";
@@ -161,15 +167,33 @@ describe("tokenRows", () => {
 });
 
 describe("formatting", () => {
-  it("balances: exact digits up to 6 decimals, rounded down, dust shown as < 0.000001", () => {
+  it("balances: at most 6 significant digits, rounded down, dust shown as < 0.000001", () => {
     expect(formatBalance("12340000", 6)).toBe("12.34");
     expect(formatBalance("0", 6)).toBe("0.00");
-    expect(formatBalance("1234567891", 6)).toBe("1,234.567891");
-    expect(formatBalance("1999999999999999999", 18)).toBe("1.999999");
+    expect(formatBalance("1234567891", 6)).toBe("1,234.56");
+    expect(formatBalance("1999999999999999999", 18)).toBe("1.99999");
+    expect(formatBalance("1562859786699476", 18)).toBe("0.00156285");
+    expect(formatBalance("4521015", 6)).toBe("4.52101");
+    expect(formatBalance("1000000000000", 18)).toBe("0.000001");
+    expect(formatBalance("999999999999", 18)).toBe("< 0.000001");
     expect(formatBalance("1", 18)).toBe("< 0.000001");
     expect(formatBalance("1", 2)).toBe("0.01");
     expect(formatBalance("5", 0)).toBe("5");
+    expect(formatBalance("1234567891", 0)).toBe("1,234,567,891");
     expect(formatBalance("1000000000000000000000000000000", 24)).toBe("1,000,000.00");
+    expect(formatBalance("1234567890000000000000000000000", 24)).toBe("1,234,567.00");
+  });
+  it("amounts needed / estimates: at most 6 significant digits, rounded up", () => {
+    expect(formatNeeded("481720114165824", 18, "ETH")).toBe("0.000481721 ETH");
+    expect(formatNeeded("2005013", 6, "USDC")).toBe("2.00502 USDC");
+    expect(formatNeeded("2000000", 6, "USDC")).toBe("2.00 USDC");
+    expect(formatNeeded("999999999", 18, "ETH")).toBe("0.000000001 ETH");
+    expect(formatNeeded("9999995", 6, "USDC")).toBe("10.00 USDC");
+    expect(formatSignificant("0", 18, "ceil")).toBe("0.00");
+    expect(formatSignificant("123", 2, "floor", 2)).toBe("1.20");
+    expect(() => formatSignificant("1.5", 6, "floor")).toThrow("not a base-unit amount");
+    expect(() => formatSignificant("1", -1, "floor")).toThrow("bad decimals");
+    expect(() => formatSignificant("1", 6, "floor", 0)).toThrow("bad digits");
   });
   it("amounts needed: rounded up to 2 significant digits", () => {
     expect(roundUpSignificant(781_000_000_000n)).toBe(790_000_000_000n);
@@ -249,24 +273,25 @@ describe("readBalances", () => {
       return new Error("unsupported");
     });
     stubFetch(() => new Response("", { status: 500 }));
-    const r = await readBalances(evmWallet(p), [usdc, dai, eth, intents], CFG).catch((e) => e);
-    // Intents balances come from the NEAR RPC: when it fails, the read fails as a whole (full-list fallback).
-    expect(r).toBeInstanceOf(Error);
-    const ok = await readBalances(evmWallet(p), [usdc, dai, eth], CFG);
-    expect(ok).toEqual({
+    // Intents balances come from the NEAR RPC: when it fails, only that balance is unknown. DAI answers
+    // "0x" (no contract data): unknown too, never a zero balance that would hide the token.
+    const r = await readBalances(evmWallet(p), [usdc, dai, eth, intents], CFG);
+    expect(r).toEqual({
       state: "ok",
       balances: new Map([
         [optionKey(usdc), "12340000"],
-        [optionKey(dai), "0"],
+        [optionKey(dai), null],
         [optionKey(eth), "1000000000000000"],
+        [optionKey(intents), null],
       ]),
     });
     const other = provider((m) => (m === "eth_chainId" ? "0x1" : new Error("must not read")));
     expect(await readBalances(evmWallet(other), [usdc], CFG)).toEqual({ state: "wrong_chain", chain: "eip155:8453" });
     expect(other.calls).toEqual(["eth_chainId"]);
     expect(await readBalances(evmWallet(p), [nearUsdc], CFG)).toEqual({ state: "none" });
+    // Every read failed: the read fails as a whole (full-list fallback with a note).
     const bad = provider((m) => (m === "eth_chainId" ? "0x2105" : "not hex"));
-    await expect(readBalances(evmWallet(bad), [usdc], CFG)).rejects.toThrow("balanceOf");
+    await expect(readBalances(evmWallet(bad), [usdc, eth], CFG)).rejects.toThrow("no balance could be read");
   });
   it("EVM signer's NEAR Intents balance: mt_balance_of on intents.near for the lower-case address", async () => {
     const bodies = stubFetch(() => view("2006000"));
@@ -353,5 +378,118 @@ describe("NEAR / Solana balance parsing", () => {
     await expect(splBalances("https://s", "o")).rejects.toThrow("malformed token account");
     stubFetch(() => new Response("", { status: 503 }));
     await expect(solBalance("https://s", "o")).rejects.toThrow("503");
+  });
+});
+
+// ---- regression: live beta, MetaMask on Base (USDC missing, ETH shown as "< 0.000001") ------------------
+
+describe("production case: EVM wallet on Base with USDC + ETH, server also offers the Intents transfer", () => {
+  const PAYER = "0x4De0e65AB08C2a1D21a2651E9462a42AB11B7559";
+  const ETH_ASSET = "nep141:base.omft.near";
+  const USDC_ASSET = `nep141:base-${USDC}.omft.near`;
+  const NEEDED = "481720114165824"; // 0.000481720114165824 ETH
+  // Shaped like rails → payments: the Intents transfer first (unshifted), then the chain tokens by asset id.
+  const intentsEth = opt({
+    method: "intents_transfer",
+    origin_asset_id: ETH_ASSET,
+    chain: "near:mainnet",
+    symbol: "ETH",
+    decimals: 18,
+    estimated_amount_in: NEEDED,
+    route_class: "intents_transfer",
+    token: null,
+  });
+  const baseUsdc = opt({
+    origin_asset_id: USDC_ASSET,
+    estimated_amount_in: "1520000",
+    token: { standard: "erc20", address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+  });
+  const baseEth = opt({
+    origin_asset_id: ETH_ASSET,
+    symbol: "ETH",
+    decimals: 18,
+    estimated_amount_in: NEEDED,
+    route_class: "same_asset",
+    token: { standard: "native", address: null },
+  });
+  const all = [intentsEth, baseUsdc, baseEth];
+  const metamask = (opts: { usdc?: unknown } = {}) =>
+    provider((m, params) => {
+      if (m === "eth_chainId") return "0x2105";
+      if (m === "eth_getBalance") {
+        expect(params[0]).toBe(PAYER);
+        return "0x58d69a66b82d4"; // 1562859786699476 wei = 0.001562859786699476 ETH
+      }
+      if (m === "eth_call") {
+        const c = params[0] as { to: string; data: string };
+        if (c.to === USDC) return opts.usdc ?? `0x${"44fc37".padStart(64, "0")}`; // 4521015 = 4.521015 USDC
+      }
+      return new Error("unsupported");
+    });
+  const wallet = (p: Eip1193Provider): WalletHandle => ({
+    family: "evm",
+    address: PAYER,
+    label: "MetaMask",
+    provider: p,
+  });
+
+  it("the default network is Base (the wallet's chain), not the NEAR Intents balance listed first", () => {
+    expect(defaultNetwork(all, null)).toBe("eip155:8453");
+    expect(networksOf(all).map((n) => n.key)).toEqual(["eip155:8453", "intents"]);
+    expect(defaultNetwork(all, intentsEth)).toBe("intents"); // an explicit preference still wins
+    expect(defaultNetwork([intentsEth, { ...baseEth, available: false, reason: "route_too_slow" }], null)).toBe(
+      "intents",
+    );
+    expect(defaultNetwork([{ ...baseEth, available: false, reason: "route_too_slow" }], null)).toBe("eip155:8453");
+    expect(defaultNetwork([], null)).toBeNull();
+  });
+
+  it("Base: wallet balances read through the provider, attributed and formatted right", async () => {
+    stubFetch(() => {
+      throw new Error("no NEAR RPC call for the Base network");
+    });
+    const base = all.filter((o) => o.method === "route_quote");
+    const p = metamask();
+    const r = await readBalances(wallet(p), base, CFG);
+    expect(r).toEqual({
+      state: "ok",
+      balances: new Map([
+        [optionKey(baseUsdc), "4521015"],
+        [optionKey(baseEth), "1562859786699476"],
+      ]),
+    });
+    const rows = tokenRows(base, r.state === "ok" ? r.balances : null, false);
+    expect(rows.map((x) => [x.option.symbol, formatBalance(x.balance as string, x.option.decimals), x.short])).toEqual([
+      ["ETH", "0.00156285", false], // 3.2× the payment
+      ["USDC", "4.52101", false], // 3.0×
+    ]);
+    expect(rows.every(rowSelectable)).toBe(true);
+    expect(formatNeeded(NEEDED, 18, "ETH")).toBe("0.000481721 ETH");
+  });
+
+  it("NEAR Intents: the dust balance belongs to the Intents transfer only (lower-case account)", async () => {
+    const bodies = stubFetch(() => view("123456789"));
+    const r = await readBalances(wallet(provider(() => new Error("no EVM read"))), [intentsEth], CFG);
+    expect(r).toEqual({ state: "ok", balances: new Map([[optionKey(intentsEth), "123456789"]]) });
+    expect(argsOf(bodies[0] as never)).toEqual({ account_id: PAYER.toLowerCase(), token_id: ETH_ASSET });
+    const [row] = tokenRows([intentsEth], r.state === "ok" ? r.balances : null, false);
+    expect(row && formatBalance(row.balance as string, 18)).toBe("< 0.000001");
+    expect(row?.short).toBe(true);
+  });
+
+  it("a failed USDC read: listed as unknown (selectable), not hidden; ETH still shown", async () => {
+    stubFetch(() => undefined);
+    const base = [baseUsdc, baseEth];
+    for (const usdc of [new Error("execution reverted"), "0x"]) {
+      const r = await readBalances(wallet(metamask({ usdc })), base, CFG);
+      const balances = r.state === "ok" ? r.balances : null;
+      expect(balances?.get(optionKey(baseUsdc))).toBeNull();
+      const rows = tokenRows(base, balances, false);
+      expect(rows.map((x) => [x.option.symbol, x.balance, x.unavailable])).toEqual([
+        ["ETH", "1562859786699476", false],
+        ["USDC", null, true],
+      ]);
+      expect(rows.every(rowSelectable)).toBe(true);
+    }
   });
 });
