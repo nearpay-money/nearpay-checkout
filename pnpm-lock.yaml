@@ -14,8 +14,8 @@ importers:
         specifier: 0.11.4
         version: 0.11.4
       "@nearpay-internal/ui":
-        specifier: 0.3.1
-        version: 0.3.1(react@19.1.10)
+        specifier: 0.5.0
+        version: 0.5.0(react@19.1.10)
       "@nearpay/spec":
         specifier: 0.4.1
         version: 0.4.1(zod@4.6.7)
@@ -346,9 +346,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  "@fontsource-variable/dm-sans@5.3.0":
+  "@fontsource-variable/instrument-sans@5.3.0":
     resolution:
-      { integrity: sha512-BpUG5bqePiDFMBM4ZtLSlPdAIOM990uB1dlXzIf4aw21yQR7BmykedLXXXMqGWsR18aMLOsbWccwJNh3ztTQaA== }
+      { integrity: sha512-u4gKbDBTNFGkg997tfQn3eHOhHuquWUFTRT/rwzuKtrxX5P2ekfs2x+LgBPP4P32+cC+vUwF1Cr+IdRoPQbrGw== }
 
   "@hot-labs/near-connect@0.11.4":
     resolution:
@@ -381,9 +381,9 @@ packages:
     resolution:
       { integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw== }
 
-  "@nearpay-internal/ui@0.3.1":
+  "@nearpay-internal/ui@0.5.0":
     resolution:
-      { integrity: sha512-AKBFIDKR29SwNXdI5sPLKU/md6PV/2AcABqPRQbZJlXrQTZT8w7TSX+ZA5ubREI3p1jLQb2z5AfmMAAeR/IXPw== }
+      { integrity: sha512-eXZA9cRcOCjqlWDTFpAG3AlD81bwWcXT7FPPN0+kDc1FHCH/M8P9lZGmCAcOYd8VTnv/V7P/VtuesLNaSj0rzA== }
     engines: { node: ">=22.11.0" }
     peerDependencies:
       react: ^19.0.0
@@ -1280,7 +1280,7 @@ snapshots:
   "@esbuild/win32-x64@0.21.5":
     optional: true
 
-  "@fontsource-variable/dm-sans@5.3.0": {}
+  "@fontsource-variable/instrument-sans@5.3.0": {}
 
   "@hot-labs/near-connect@0.11.4": {}
 
@@ -1309,9 +1309,9 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.6.0
 
-  "@nearpay-internal/ui@0.3.1(react@19.1.10)":
+  "@nearpay-internal/ui@0.5.0(react@19.1.10)":
     dependencies:
-      "@fontsource-variable/dm-sans": 5.3.0
+      "@fontsource-variable/instrument-sans": 5.3.0
       react: 19.1.10
 
   "@nearpay/spec@0.4.1(zod@4.6.7)":

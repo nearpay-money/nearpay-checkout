@@ -139,13 +139,13 @@ describe("Picker markup", () => {
     expect(out).toContain('aria-expanded="true"');
     expect(out).toMatch(/role="combobox"[^>]*aria-controls="([^"]+)"/);
     const listId = /role="combobox"[^>]*aria-controls="([^"]+)"/.exec(out)?.[1] as string;
-    // The listbox IS the scrolling container (.ck-picker__list: max-height + overflow-y in styles.css).
-    expect(out).toMatch(new RegExp(`id="${listId}" role="listbox"[^>]*class="ck-picker__list"`));
+    // The listbox IS the scrolling container (.np-picker__list: max-height + overflow-y in the kit CSS).
+    expect(out).toMatch(new RegExp(`id="${listId}" role="listbox"[^>]*class="np-picker__list"`));
     expect(out).toContain(`aria-activedescendant="${optionDomId(listId, "eip155:8453")}"`);
     expect((out.match(/role="option"/g) ?? []).length).toBe(5);
-    expect(out).toMatch(/aria-selected="true"[^>]*class="ck-picker__option ck-picker__option--selected/);
+    expect(out).toMatch(/aria-selected="true"[^>]*class="np-picker__option np-picker__option--selected/);
     expect(out).toContain('aria-disabled="true"');
-    expect(out).not.toContain("ck-picker__panel--sheet"); // sheet only below 480 px
+    expect(out).not.toContain("np-picker__panel--sheet"); // sheet only below 480 px
     expect(SHEET_QUERY).toBe("(max-width: 479px)");
   });
   it("open: groups, trailing balance, footer, notice; empty and loading states", () => {
@@ -163,7 +163,7 @@ describe("Picker markup", () => {
     );
     expect(grouped).toContain('role="group"');
     expect(grouped).toContain("Popular");
-    expect(grouped).toContain('class="ck-picker__trail">12.34');
+    expect(grouped).toContain('class="np-picker__trail">12.34');
     expect(grouped).toContain("Show all tokens");
     expect(grouped).toContain("Balances unavailable");
     expect(html(props({ defaultOpen: true, items: [] }))).toContain("No matching networks");
@@ -172,10 +172,36 @@ describe("Picker markup", () => {
     expect(loading).toContain("Checking your balances…");
     expect(loading).not.toContain('role="listbox"');
   });
-  it("styles keep the list scrolling inside a 320 px panel (60vh in the phone sheet)", async () => {
+  it("closed (design v2): the kit trigger card with the label inside, balance after the value, chosen border", () => {
+    const out = html(
+      props({
+        label: "Token",
+        items: [{ value: "x", label: "USDC · 12.34", triggerLabel: "USDC" }],
+        value: "x",
+        triggerBalance: "12.34",
+        balanceLabel: "Balance",
+        highlight: true,
+      }),
+    );
+    expect(out).toContain("np-picker__trigger--card");
+    expect(out).toContain("np-picker__trigger--selected");
+    expect(out).toMatch(/class="np-picker__caption"><span id="[^"]+">Token<\/span>/);
+    expect(out).toContain('class="np-picker__balance"><span class="np-sr-only">Balance </span>12.34');
+    // The panel and the list are named by the label inside the card.
+    const open = html(props({ defaultOpen: true }));
+    const labelId = /class="np-picker__caption"><span id="([^"]+)"/.exec(open)?.[1] as string;
+    expect(open).toContain(`role="dialog" aria-labelledby="${labelId}"`);
+    expect(open).not.toContain("ck-picker");
+  });
+  it("styles (kit np-picker*) keep the list scrolling inside a 320 px panel (60vh in the phone sheet)", async () => {
     const { readFileSync } = await import("node:fs");
-    const css = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
-    expect(css).toMatch(/\.ck-picker__list \{[^}]*max-height: 320px;[^}]*overflow-y: auto;/);
-    expect(css).toMatch(/\.ck-picker__panel--sheet \.ck-picker__list \{[^}]*max-height: 60vh;/);
+    const { createRequire } = await import("node:module");
+    const kitCss = createRequire(import.meta.url).resolve("@nearpay-internal/ui/styles.css");
+    const css = readFileSync(kitCss, "utf8");
+    expect(css).toMatch(/\.np-picker__list \{[^}]*max-height: 320px;[^}]*overflow-y: auto;/);
+    expect(css).toMatch(/\.np-picker__panel--sheet \.np-picker__list \{[^}]*max-height: 60vh;/);
+    // The checkout carries no picker CSS of its own any more.
+    const own = readFileSync(new URL("../../src/styles.css", import.meta.url), "utf8");
+    expect(own).not.toMatch(/ck-picker/);
   });
 });

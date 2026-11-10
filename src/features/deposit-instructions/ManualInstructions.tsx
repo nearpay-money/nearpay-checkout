@@ -6,22 +6,31 @@
  * expected" (needs_top_up) with the same guarded instructions for the remainder.
  */
 import { Button, Callout, Card, Checkbox, CopyField, KeyValueList, Money } from "@nearpay-internal/ui";
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { moneyText, referenceText, type ViewModel } from "../../app/model";
 import type { Checkout } from "../../app/useCheckout";
 import { chainName, walletAsset } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { assetMoney, receivedSoFar, walletTokenHint } from "../../lib/money/display";
 import { CopyTextButton, ScreenTitle } from "../../ui/blocks";
-import { QrCode } from "./QrCode";
 import { paymentUri, qrPayload } from "./qr";
 import { withCountdown } from "./WalletPay";
+
+/**
+ * The QR encoder (uqr, ~6 KB gz) is a lazy chunk (§7 initial-JS budget): the QR is shown only after the
+ * network (and memo) confirmations, and the chunk is prefetched as soon as the instructions mount.
+ */
+const loadQr = () => import("./QrCode");
+const QrCode = lazy(() => loadQr().then((m) => ({ default: m.QrCode })));
 
 export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewModel; topUp: boolean }) {
   const v = c.state.verified;
   const d = v?.attestation.deposit;
   const [network, setNetwork] = useState(false);
   const [memo, setMemo] = useState(false);
+  useEffect(() => {
+    void loadQr().catch(() => undefined);
+  }, []);
   if (!v || !d) return null;
   const chain = chainName(d.chain);
   const symbol = vm.asset?.symbol ?? "";
@@ -131,10 +140,12 @@ export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewMode
               footer={
                 <div className="ck-deposit__footer">
                   {expires}
-                  <QrCode
-                    value={paymentUri(v.attestation) ?? qrPayload(d.address, d.amount_in, recipe)}
-                    label={t("deposit.qr")}
-                  />
+                  <Suspense fallback={<span className="np-qr ck-qr-loading" aria-hidden="true" />}>
+                    <QrCode
+                      value={paymentUri(v.attestation) ?? qrPayload(d.address, d.amount_in, recipe)}
+                      label={t("deposit.qr")}
+                    />
+                  </Suspense>
                 </div>
               }
             />

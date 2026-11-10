@@ -2,10 +2,12 @@
 import { CheckoutFrame } from "@nearpay-internal/ui";
 import { useEffect, useState } from "react";
 import { CheckoutView } from "../../app/CheckoutView";
+import { siteOf } from "../../app/OrderSummary";
 import { safeHttpUrl, successRedirect } from "../../app/route";
 import { BlockedScreen } from "../../app/StatusScreens";
 import { useCheckout } from "../../app/useCheckout";
 import { webLinks } from "../../config";
+import { t } from "../../lib/i18n/t";
 
 export const REDIRECT_DELAY_MS = 2500;
 
@@ -30,6 +32,7 @@ export function HostedCheckout({ sessionId, secret }: { sessionId: string; secre
       returnTo={target}
       redirecting={redirecting}
       cancelUrl={safeHttpUrl(session?.cancel_url ?? null)}
+      site={siteOf(safeHttpUrl(session?.success_url ?? null))}
     />
   );
 }
@@ -37,7 +40,7 @@ export function HostedCheckout({ sessionId, secret }: { sessionId: string; secre
 /** A link without a valid client secret or an unknown path. */
 export function InvalidLink() {
   return (
-    <CheckoutFrame links={webLinks} className="ck-frame">
+    <CheckoutFrame links={webLinks} securedLabel={t("app.poweredBy")} className="ck-frame">
       <div className="ck-flow">
         <BlockedScreen reason="invalid_link" />
       </div>

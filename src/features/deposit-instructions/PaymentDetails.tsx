@@ -1,30 +1,35 @@
 /**
- * The ATTESTED merchant and destination (§5.2): a compact trust row on the instructions screens and the
+ * The ATTESTED merchant and destination (§5.2): the verified line on the instructions screens and the
  * "Payment details" sheet (merchant, "Business details declared by the merchant", payment destination,
  * destination fingerprint). Business details are self-declared and go live without a NearPay review
  * (open onboarding, ADR-0024), so the copy
  * never claims a verified identity (ADR-0020, design-system §6.3). The fingerprint keeps the format the
  * merchant sees in the dashboard (`XXXX-XXXX-XX`) so the two can be compared character by character.
  */
-import { Button, Modal, ShieldCheckIcon, StatusBadge } from "@nearpay-internal/ui";
+import { Button, Callout, Modal, StatusBadge } from "@nearpay-internal/ui";
 import { useState } from "react";
 import type { ViewModel } from "../../app/model";
 import { t } from "../../lib/i18n/t";
 
-export function TrustRow({ vm }: { vm: ViewModel }) {
+/**
+ * Design v2 trust line on the instruction screens, shown only once the sentinel co-signature verified
+ * (the caller checks `state.verified`): "Payout address verified for <attested merchant>" — what was
+ * actually verified — then the declared business details and the "Payment details" sheet.
+ */
+export function VerifiedMerchant({ vm }: { vm: ViewModel }) {
   const [open, setOpen] = useState(false);
   if (!vm.merchant || !vm.destination) return null;
   return (
-    <div className="ck-trust" data-testid="verified-merchant">
-      <span className="ck-trust__text">
-        <ShieldCheckIcon size={16} />
+    <div className="ck-verified" data-testid="verified-merchant">
+      <Callout tone="verified" compact title={t("trust.verified", { merchant: vm.merchant.name })} />
+      <p className="ck-verified__meta">
         <span data-testid="kyb-inline">
           {vm.merchant.reviewed ? t("trust.reviewedText") : t("trust.notReviewedText")}
         </span>
-      </span>
-      <button type="button" className="np-link-button" onClick={() => setOpen(true)} data-testid="payment-details">
-        {t("app.paymentDetails")}
-      </button>
+        <button type="button" className="np-link-button" onClick={() => setOpen(true)} data-testid="payment-details">
+          {t("app.paymentDetails")}
+        </button>
+      </p>
       <PaymentDetailsSheet vm={vm} open={open} onClose={() => setOpen(false)} />
     </div>
   );

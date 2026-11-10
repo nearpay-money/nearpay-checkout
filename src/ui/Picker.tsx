@@ -8,8 +8,12 @@
  * ARIA: the trigger is a button (`aria-haspopup="dialog"`) opening a non-modal panel that holds a
  * combobox (the search box) controlling a listbox (`aria-activedescendant`). Built from design-system
  * tokens and classes only (no inline styles: CSP style-src); the logic lives in `picker-model.ts`.
+ *
+ * Design v2 (ui 0.5.0): the trigger is the kit `PickerTrigger` card ("Network / Base", "Token / USDC
+ * 4.52101" — the label inside the card, the balance after the value) and every class is the kit's
+ * `np-picker*` (the former `ck-picker*` one-for-one), so the checkout carries no picker CSS of its own.
  */
-import { Avatar, CheckIcon, ChevronDownIcon, CloseIcon, cx, SearchIcon, Skeleton } from "@nearpay-internal/ui";
+import { Avatar, CheckIcon, CloseIcon, cx, PickerTrigger, SearchIcon, Skeleton } from "@nearpay-internal/ui";
 import { type KeyboardEvent, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   filterItems,
@@ -42,8 +46,14 @@ export interface PickerProps {
   onChange: (value: string) => void;
   /** Trigger text when nothing is selected. */
   placeholder: string;
-  /** Second line of the trigger (e.g. the balance of the selected token). */
+  /** Second line of the trigger (e.g. "Balance unavailable"). */
   triggerDescription?: ReactNode;
+  /** Balance after the trigger value ("USDC 4.52101"), secondary text with tabular numerals. */
+  triggerBalance?: ReactNode;
+  /** Screen-reader prefix of `triggerBalance` ("Balance"). */
+  balanceLabel?: string;
+  /** The chosen picker of the pair: 2 px teal border (kit `--selected`). */
+  highlight?: boolean;
   /** Label and placeholder of the search box. */
   searchLabel: string;
   /** Shown when the filter matches nothing (or the list is empty). */
@@ -76,6 +86,9 @@ export function Picker({
   onChange,
   placeholder,
   triggerDescription,
+  triggerBalance,
+  balanceLabel = "Balance",
+  highlight = false,
   searchLabel,
   empty,
   loading = false,
@@ -200,22 +213,22 @@ export function Picker({
         aria-selected={isSelected}
         aria-disabled={item.disabled || undefined}
         className={cx(
-          "ck-picker__option",
-          isSelected && "ck-picker__option--selected",
-          item.value === active && "ck-picker__option--active",
-          item.disabled && "ck-picker__option--disabled",
+          "np-picker__option",
+          isSelected && "np-picker__option--selected",
+          item.value === active && "np-picker__option--active",
+          item.disabled && "np-picker__option--disabled",
         )}
         onClick={() => !item.disabled && select(item.value)}
         onPointerMove={() => !item.disabled && item.value !== active && setActive(item.value)}
         data-testid={item.testId}
       >
         <Avatar initial={item.avatar ?? item.label} size="sm" />
-        <span className="ck-picker__text">
-          <span className="ck-picker__title">{item.label}</span>
-          {item.description ? <span className="ck-picker__sub">{item.description}</span> : null}
+        <span className="np-picker__text">
+          <span className="np-picker__title">{item.label}</span>
+          {item.description ? <span className="np-picker__sub">{item.description}</span> : null}
         </span>
-        {item.trailing ? <span className="ck-picker__trail">{item.trailing}</span> : null}
-        <span className="ck-picker__check" aria-hidden="true">
+        {item.trailing ? <span className="np-picker__trail">{item.trailing}</span> : null}
+        <span className="np-picker__check" aria-hidden="true">
           {isSelected ? <CheckIcon size={16} /> : null}
         </span>
       </div>
@@ -224,48 +237,48 @@ export function Picker({
   // Consecutive items with the same group heading form one ARIA group.
   const sections = groupRuns(visible);
   return (
-    <div ref={root} className={cx("ck-picker", open && "ck-picker--open", className)} data-testid={testId}>
-      <span id={labelId} className="ck-picker__label">
-        {label}
-      </span>
-      <button
+    <div ref={root} className={cx("np-picker", open && "np-picker--open", className)} data-testid={testId}>
+      {/* The label sits inside the card (kit trigger card); it also names the panel and the list. */}
+      <PickerTrigger
         ref={trigger}
-        type="button"
-        className="ck-picker__trigger"
+        caption={<span id={labelId}>{label}</span>}
+        value={selected ? (selected.triggerLabel ?? selected.label) : null}
+        placeholder={placeholder}
+        avatar={selected ? <Avatar initial={selected.avatar ?? selected.label} size="sm" /> : undefined}
+        balance={
+          selected && triggerBalance != null ? (
+            <>
+              <span className="np-sr-only">{balanceLabel} </span>
+              {triggerBalance}
+            </>
+          ) : undefined
+        }
+        description={selected ? triggerDescription : undefined}
+        selected={highlight}
+        open={open}
         aria-haspopup="dialog"
-        aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        aria-labelledby={`${labelId} ${labelId}-value`}
         disabled={disabled}
         onClick={() => (open ? close(false) : openWith(""))}
         onKeyDown={onTriggerKey}
         data-testid={`${testId}-trigger`}
-      >
-        {selected ? <Avatar initial={selected.avatar ?? selected.label} size="sm" /> : null}
-        <span className="ck-picker__value" id={`${labelId}-value`}>
-          <span className={cx("ck-picker__title", !selected && "ck-picker__placeholder")}>
-            {selected ? (selected.triggerLabel ?? selected.label) : placeholder}
-          </span>
-          {selected && triggerDescription ? <span className="ck-picker__sub">{triggerDescription}</span> : null}
-        </span>
-        <ChevronDownIcon size={20} />
-      </button>
+      />
       {open ? (
         <>
-          {sheet ? <div className="ck-picker__backdrop" aria-hidden="true" onClick={() => close(true)} /> : null}
+          {sheet ? <div className="np-picker__backdrop" aria-hidden="true" onClick={() => close(true)} /> : null}
           <div
             id={panelId}
             role="dialog"
             aria-labelledby={labelId}
-            className={cx("ck-picker__panel", sheet && "ck-picker__panel--sheet")}
+            className={cx("np-picker__panel", sheet && "np-picker__panel--sheet")}
             data-testid={`${testId}-panel`}
           >
             {sheet ? (
-              <div className="ck-picker__sheet-head">
-                <span className="ck-picker__sheet-title" aria-hidden="true">
+              <div className="np-picker__sheet-head">
+                <span className="np-picker__sheet-title" aria-hidden="true">
                   {label}
                 </span>
-                <button type="button" className="ck-picker__close" aria-label={closeLabel} onClick={() => close(true)}>
+                <button type="button" className="np-picker__close" aria-label={closeLabel} onClick={() => close(true)}>
                   <CloseIcon size={20} />
                 </button>
               </div>
@@ -273,7 +286,7 @@ export function Picker({
             <label htmlFor={inputId} className="np-sr-only">
               {searchLabel}
             </label>
-            <div className="np-input np-input--trailing ck-picker__search">
+            <div className="np-input np-input--trailing np-picker__search">
               <input
                 ref={input}
                 id={inputId}
@@ -299,9 +312,9 @@ export function Picker({
                 <SearchIcon size={20} />
               </span>
             </div>
-            {notice ? <div className="ck-picker__notice">{notice}</div> : null}
+            {notice ? <div className="np-picker__notice">{notice}</div> : null}
             {loading ? (
-              <div className="ck-picker__list" aria-busy="true" data-testid={`${testId}-loading`}>
+              <div className="np-picker__list" aria-busy="true" data-testid={`${testId}-loading`}>
                 <p className="np-sr-only" role="status">
                   {loadingLabel}
                 </p>
@@ -314,7 +327,7 @@ export function Picker({
                 id={listId}
                 role="listbox"
                 aria-labelledby={labelId}
-                className="ck-picker__list"
+                className="np-picker__list"
                 data-testid={`${testId}-list`}
               >
                 {sections.map((sec, i) =>
@@ -324,9 +337,9 @@ export function Picker({
                       key={`g-${(sec.items[0] as PickerItem).value}`}
                       role="group"
                       aria-labelledby={`${listId}-g${i}`}
-                      className="ck-picker__group"
+                      className="np-picker__group"
                     >
-                      <div id={`${listId}-g${i}`} className="ck-picker__group-label" role="presentation">
+                      <div id={`${listId}-g${i}`} className="np-picker__group-label" role="presentation">
                         {sec.group}
                       </div>
                       {sec.items.map(renderOption)}
@@ -338,11 +351,11 @@ export function Picker({
               </div>
             )}
             {!loading && visible.length === 0 ? (
-              <p className="ck-picker__empty" data-testid={`${testId}-empty`}>
+              <p className="np-picker__empty" data-testid={`${testId}-empty`}>
                 {empty}
               </p>
             ) : null}
-            {footer ? <div className="ck-picker__footer">{footer}</div> : null}
+            {footer ? <div className="np-picker__footer">{footer}</div> : null}
             <div role="status" aria-live="polite" aria-atomic="true" className="np-sr-only">
               {query && !loading ? countLabel(visible.length) : ""}
             </div>

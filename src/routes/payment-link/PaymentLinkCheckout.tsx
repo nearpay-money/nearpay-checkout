@@ -7,9 +7,10 @@
  */
 
 import { createPaymentLinkSession, getPublicPaymentLink, type PublicPaymentLink } from "@nearpay/spec";
-import { Button, Callout, CheckoutFrame, Field, Input, KeyValueList, Money, WarningIcon } from "@nearpay-internal/ui";
+import { Button, Callout, CheckoutFrame, Field, Input, Money, WarningIcon } from "@nearpay-internal/ui";
 import { useCallback, useEffect, useState } from "react";
 import type { z } from "zod";
+import { AmountWithLabel, OrderHeader, OrderLines, PaymentRoute, WIDE_QUERY } from "../../app/OrderSummary";
 import { linkSessionPath } from "../../app/route";
 import { LoadingScreen } from "../../app/StatusScreens";
 import { webLinks } from "../../config";
@@ -38,7 +39,7 @@ export function PaymentLinkCheckout({ id }: { id: string }) {
   const [touched, setTouched] = useState(false);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const wide = useMediaQuery("(min-width: 880px)");
+  const wide = useMediaQuery(WIDE_QUERY);
 
   const load = useCallback(() => {
     setSt({ kind: "loading" });
@@ -124,11 +125,7 @@ export function PaymentLinkCheckout({ id }: { id: string }) {
       case "ready":
         return (
           <section className="ck-screen" data-testid="payment-link" aria-labelledby="ck-link-title">
-            <ScreenTitle
-              id="ck-link-title"
-              title={wide ? t("start.titleEmbed") : st.link.display.description}
-              lede={t("start.lede")}
-            />
+            <ScreenTitle id="ck-link-title" title={t("start.titleEmbed")} lede={t("start.lede")} />
             {error ? <Callout tone="danger" title={error} live data-testid="error" /> : null}
             <form
               className="np-stack"
@@ -172,32 +169,47 @@ export function PaymentLinkCheckout({ id }: { id: string }) {
     }
   })();
 
+  // Order summary (design v2): the navy order side from 960 px, a collapsed header on phones. No
+  // merchant name before a session's attestation (the link's name is unverified, L-CK-03).
+  const priceNode = link ? price ? <Money {...price} size="hero" /> : `${link.amount}` : null;
+  const lineValue = link ? price ? <Money {...price} /> : `${link.amount}` : null;
+  const order = link ? (
+    <>
+      <OrderLines
+        items={[
+          { label: link.display.description, value: lineValue },
+          { label: t("summary.total"), value: lineValue, total: true },
+        ]}
+      />
+      <PaymentRoute from={null} merchant={null} />
+    </>
+  ) : null;
   return (
     <CheckoutFrame
       amount={
-        link ? (
-          <span data-testid="price">{price ? <Money {...price} size="hero" /> : `${link.amount}`}</span>
-        ) : undefined
-      }
-      summary={
         link && wide ? (
-          <>
-            <h2 className="ck-summary-title">{link.display.description}</h2>
-            <hr className="np-divider" />
-            <KeyValueList
-              items={[{ label: t("summary.subtotal"), value: price ? <Money {...price} /> : `${link.amount}` }]}
-            />
-          </>
+          <AmountWithLabel label={link.display.description} amount={<span data-testid="price">{priceNode}</span>} />
         ) : undefined
       }
+      summary={wide ? (order ?? undefined) : undefined}
       banner={
         link && !link.livemode ? (
           <Callout tone="info" title={t("app.testmode")} reference={t("app.testmodeRef")} data-testid="test-banner" />
         ) : undefined
       }
+      securedLabel={t("app.poweredBy")}
       links={webLinks}
       className="ck-frame"
     >
+      {link && !wide ? (
+        <OrderHeader
+          merchant={null}
+          title={link.display.description}
+          amount={<span data-testid="price">{priceNode}</span>}
+          details={order}
+          navy
+        />
+      ) : null}
       <div className="ck-flow">{body}</div>
     </CheckoutFrame>
   );
