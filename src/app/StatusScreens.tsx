@@ -12,12 +12,13 @@ import {
   WalletIcon,
   WarningIcon,
 } from "@nearpay-internal/ui";
-import type { ReactNode } from "react";
+import { type ReactNode, useCallback, useState } from "react";
 import { hasMessage, t } from "../lib/i18n/t";
 import { assetMoney } from "../lib/money/display";
 import { CopyTextButton, StateScreen } from "../ui/blocks";
 import type { BlockReason } from "./machine";
 import { referenceText, type ViewModel } from "./model";
+import { checkedAtLabel, confirmingBody } from "./screens";
 import type { Checkout } from "./useCheckout";
 
 const ref = (vm: ViewModel) => (vm.reference ? referenceText(vm.reference, vm.merchant?.name ?? null) : undefined);
@@ -172,6 +173,29 @@ export function AddressExpiredScreen({ c, vm }: { c: Checkout; vm: ViewModel }) 
   );
 }
 
+/** A "Check status" press shows a spinner at least this long, so a fast reload still reads as feedback. */
+const MIN_CHECK_MS = 600;
+
+/** "Check status": reload the session, with a spinner meanwhile and the time of the last check after it. */
+function useCheckStatus(refresh: () => Promise<void>) {
+  const [checking, setChecking] = useState(false);
+  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
+  const check = useCallback(async () => {
+    if (checking) return;
+    setChecking(true);
+    const started = Date.now();
+    try {
+      await refresh();
+    } finally {
+      const left = MIN_CHECK_MS - (Date.now() - started);
+      if (left > 0) await new Promise((r) => setTimeout(r, left));
+      setChecking(false);
+      setCheckedAt(new Date());
+    }
+  }, [checking, refresh]);
+  return { checking, checkedAt, check };
+}
+
 export function ProcessingScreen({
   c,
   vm,
@@ -181,9 +205,12 @@ export function ProcessingScreen({
   vm: ViewModel;
   variant: "waiting" | "confirming" | "slow";
 }) {
+  const status = useCheckStatus(c.actions.refresh);
+  const confirming = confirmingBody(c.state.attempt?.status, vm.destination?.chain);
+  const confirmingText = t(confirming.key, confirming.chain ? { chain: confirming.chain } : {});
   const title =
     variant === "waiting" ? t("waiting.title") : variant === "slow" ? t("slow.title") : t("confirming.title");
-  const body = variant === "waiting" ? t("waiting.body") : variant === "slow" ? t("slow.body") : t("confirming.body");
+  const body = variant === "waiting" ? t("waiting.body") : variant === "slow" ? t("slow.body") : confirmingText;
   return (
     <StateScreen
       testId="processing"
@@ -196,9 +223,22 @@ export function ProcessingScreen({
       actions={
         <>
           {variant === "slow" ? (
-            <Button fullWidth onClick={() => void c.actions.refresh()} data-testid="check-status">
-              {t("app.checkStatus")}
-            </Button>
+            <>
+              <Button
+                fullWidth
+                onClick={() => void status.check()}
+                loading={status.checking}
+                loadingText={t("slow.checking")}
+                data-testid="check-status"
+              >
+                {t("app.checkStatus")}
+              </Button>
+              {status.checkedAt && !status.checking ? (
+                <p className="np-checkout__note" role="status" data-testid="checked-at">
+                  {t("slow.checked", { time: checkedAtLabel(status.checkedAt) })}
+                </p>
+              ) : null}
+            </>
           ) : (
             <Button fullWidth loading loadingText={t("confirming.button")}>
               {t("confirming.button")}
