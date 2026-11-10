@@ -108,10 +108,10 @@ test("verifying names the destination chain; Still confirming → Check status g
   await expect(page.getByTestId("processing")).toBeVisible();
   mock.setAttempt(s, { status: "deposit_detected", attestation_ticket: null });
   await expect(page.getByTestId("processing")).toContainText("Keep this page open while we confirm it");
-  // ADR-0022: the funds are on the merchant's chain; NearPay confirms them on Base's own blocks
+  // ADR-0022 (amended): the funds are on the merchant's chain; NearPay confirms them on one Base block
   mock.setAttempt(s, { status: "verifying", attestation_ticket: null });
   await expect(page.getByTestId("processing")).toContainText(
-    "Payment received — confirming on Base (usually under a minute).",
+    "Payment received — confirming on Base… usually a few seconds",
   );
   // two minutes later: "Still confirming" with a working "Check status"
   await page.clock.fastForward(121_000);

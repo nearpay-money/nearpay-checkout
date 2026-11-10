@@ -134,12 +134,19 @@ export function canGoBack(s: State): boolean {
 }
 
 /**
- * Destination chains whose evidence usually lands within a minute: L2 block confirmations on Base and Arbitrum
- * (ADR-0022), NEAR finality, Solana `finalized`. Others (Ethereum `finalized`, Bitcoin confirmations) take longer.
+ * Destination chains NearPay confirms within seconds of the payout's block (ADR-0022 as amended 2026-11-10 17:10:
+ * one block of the chain's own consensus): every EVM chain (Ethereum included — one block, not `finalized`), NEAR
+ * finality, Solana `confirmed`. Bitcoin's one confirmation is a ~10-minute block: no time promise there.
  */
 export const FAST_CONFIRMING_CHAINS: ReadonlySet<string> = new Set([
+  "eip155:1",
   "eip155:8453",
   "eip155:42161",
+  "eip155:10",
+  "eip155:137",
+  "eip155:56",
+  "eip155:43114",
+  "eip155:100",
   "near:mainnet",
   "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
 ]);
@@ -147,7 +154,7 @@ export const FAST_CONFIRMING_CHAINS: ReadonlySet<string> = new Set([
 /**
  * Body of the "Confirming your payment" frame. While the attempt is `verifying` (the funds reached the merchant's
  * chain and NearPay is confirming them) it names the attested destination chain: "Payment received — confirming on
- * Base (usually under a minute)."; otherwise (deposit seen, swap settling) the generic text.
+ * Base… usually a few seconds"; otherwise (deposit seen, swap settling) the generic text.
  */
 export function confirmingBody(
   attemptStatus: string | null | undefined,
