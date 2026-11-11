@@ -1,6 +1,6 @@
 /**
- * Chain and token logos (bundled SVGs from `@web3icons/core`, src/assets/crypto/): self-hosted hashed
- * assets (CSP `img-src 'self'`), no JavaScript per icon. Chains are rounded squares, tokens circles, so a
+ * Chain and token logos (SVGs from `@web3icons/core`, copied to public/crypto/ by
+ * scripts/sync-crypto-icons.mjs): self-hosted static files (CSP `img-src 'self'`), no JavaScript per icon. Chains are rounded squares, tokens circles, so a
  * network never reads as a token. Unknown chains/tokens — or a logo that fails to load — fall back to the
  * kit's letter avatar. Always decorative (`alt=""`): the name is printed next to it.
  */
@@ -8,11 +8,9 @@ import { Avatar, cx } from "@nearpay-internal/ui";
 import { useState } from "react";
 import { chainIconName, tokenIconName } from "../lib/chains/icons";
 
-const URLS = import.meta.glob<string>("../assets/crypto/*.svg", { eager: true, query: "?url", import: "default" });
-
-/** Hashed URL of a bundled icon file, or null. */
+/** URL of a bundled icon file (public/crypto/), or null. */
 export function iconUrl(name: string | null): string | null {
-  return name ? (URLS[`../assets/crypto/${name}.svg`] ?? null) : null;
+  return name ? `${import.meta.env.BASE_URL}crypto/${name}.svg` : null;
 }
 
 export interface CryptoIconProps {

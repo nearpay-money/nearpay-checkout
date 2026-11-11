@@ -42,6 +42,7 @@ export function BlockedScreen({ reason }: { reason: BlockReason }) {
     <StateScreen
       testId="blocked"
       icon={<WarningIcon />}
+      iconTone="warning"
       title={t("blocked.title")}
       body={<span data-testid={`blocked-${reason}`}>{t(`blocked.${reason}`)}</span>}
     />
@@ -101,6 +102,7 @@ export function NoOptionsScreen({ c, vm, failed }: { c: Checkout; vm: ViewModel;
     <StateScreen
       testId={failed ? "not-completed" : "no-options"}
       icon={<WalletIcon />}
+      iconTone="warning"
       title={t("noOptions.title")}
       body={failed ? t("notCompleted.body") : t("noOptions.body")}
       callout={failed ? t("notCompleted.callout") : t("noOptions.callout")}
@@ -121,6 +123,7 @@ export function QuoteExpiredScreen({ c, vm }: { c: Checkout; vm: ViewModel }) {
     <StateScreen
       testId="quote-expired"
       icon={<ClockIcon />}
+      iconTone="warning"
       title={t("quote.title")}
       body={t("quote.body")}
       badge={t("quote.badge")}
@@ -148,6 +151,7 @@ export function AddressExpiredScreen({ c, vm }: { c: Checkout; vm: ViewModel }) 
     <StateScreen
       testId="expired-address"
       icon={<WarningIcon />}
+      iconTone="warning"
       title={t("expired.title")}
       body={
         <>
@@ -215,6 +219,7 @@ export function ProcessingScreen({
     <StateScreen
       testId="processing"
       icon={<ClockIcon />}
+      iconTone="progress"
       title={title}
       body={body}
       badge={variant === "waiting" ? t("waiting.badge") : t("confirming.badge")}
@@ -297,6 +302,7 @@ export function CompleteScreen({
     <StateScreen
       testId="succeeded"
       icon={<CheckIcon />}
+      iconTone="success"
       title={t("complete.title")}
       body={merchant ? t("complete.body", { merchant }) : t("complete.bodyUnknown")}
       badge={t("complete.badge")}
@@ -330,6 +336,7 @@ export function ReturnScreen({ c, vm, done }: { c: Checkout; vm: ViewModel; done
     <StateScreen
       testId="refunded"
       icon={done ? <CheckIcon /> : <ArrowRightIcon />}
+      iconTone={done ? "success" : "progress"}
       title={done ? t("returned.title") : t("returning.title")}
       body={done ? t("returned.body") : t("returning.body")}
       badge={done ? undefined : t("returning.badge")}

@@ -267,6 +267,7 @@ export function WalletPay({
       <StateScreen
         testId="wallet-pay"
         icon={<ClockIcon />}
+        iconTone="progress"
         title={t("approve.title")}
         body={t("approve.body", { amount: total, chain: network(c) })}
         badge={t("approve.badge")}
@@ -286,6 +287,7 @@ export function WalletPay({
       <StateScreen
         testId="wallet-pay"
         icon={<WalletIcon />}
+        iconTone="warning"
         title={t("notApproved.title")}
         body={t("notApproved.body")}
         badge={t("notApproved.badge")}
@@ -310,6 +312,7 @@ export function WalletPay({
       <StateScreen
         testId="wallet-pay"
         icon={<WarningIcon />}
+        iconTone="danger"
         title={t("txFailed.title")}
         body={t("txFailed.body")}
         badge={t("txFailed.badge")}

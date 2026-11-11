@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
  * Copies the chain and token logos the checkout shows from `@web3icons/core` (MIT, devDependency) into
- * src/assets/crypto/ as plain SVG files. They are served self-hosted as hashed assets (CSP `img-src 'self'`,
- * no remote images) and cost no JavaScript; only the files listed here are bundled.
+ * public/crypto/ as plain SVG files. They are served self-hosted at /crypto/<name>.svg (CSP `img-src 'self'`,
+ * no remote images) and cost no JavaScript — not even a URL map in the initial bundle (§7 budget); only the
+ * files listed here ship.
  *
  *   node scripts/sync-crypto-icons.mjs          # write the files
  *   node scripts/sync-crypto-icons.mjs --check  # exit 1 if a committed file differs from the package
  *
- * Variant "background": the logo on its brand-colour tile. The UI clips chain tiles to rounded squares and
- * token tiles to circles, so a network and a token never look alike.
+ * Tokens use the "background" variant (the logo on its brand-colour disc, clipped to a circle); chains the
+ * "branded" variant (the bare logo, shown on a neutral rounded-square tile), so a network never looks like
+ * a token.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -16,7 +18,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = join(root, "node_modules/@web3icons/core/dist/svgs");
-const out = join(root, "src/assets/crypto");
+const out = join(root, "public/crypto");
 
 /** Output file name → package icon (`networks/<name>` or `tokens/<SYMBOL>`). */
 export const ICONS = {
@@ -52,10 +54,12 @@ export const ICONS = {
   "token-arb": "networks/arbitrum-one",
 };
 
-async function svgOf(icon) {
-  const mod = await import(pathToFileURL(join(pkg, `${icon.replace("/", "/background/")}.svg.js`)).href);
+async function svgOf(name, icon) {
+  const variant = name.startsWith("chain-") ? "branded" : "background";
+  const mod = await import(pathToFileURL(join(pkg, `${icon.replace("/", `/${variant}/`)}.svg.js`)).href);
   const svg = String(mod.default).trim();
-  if (!svg.startsWith("<svg") || /<script|<image|href="http|style=/i.test(svg)) throw new Error(`unexpected SVG: ${icon}`);
+  if (!svg.startsWith("<svg") || /<script|<image|href="http|style=/i.test(svg))
+    throw new Error(`unexpected SVG: ${icon}`);
   return `${svg}\n`;
 }
 
@@ -64,7 +68,7 @@ let stale = 0;
 await mkdir(out, { recursive: true });
 for (const [name, icon] of Object.entries(ICONS)) {
   const file = join(out, `${name}.svg`);
-  const svg = await svgOf(icon);
+  const svg = await svgOf(name, icon);
   if (check) {
     const have = await readFile(file, "utf8").catch(() => "");
     if (have !== svg) {
@@ -76,4 +80,4 @@ for (const [name, icon] of Object.entries(ICONS)) {
   }
 }
 if (stale) process.exit(1);
-console.log(check ? "crypto icons up to date" : `wrote ${Object.keys(ICONS).length} icons to src/assets/crypto/`);
+console.log(check ? "crypto icons up to date" : `wrote ${Object.keys(ICONS).length} icons to public/crypto/`);

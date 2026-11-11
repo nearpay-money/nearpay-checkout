@@ -94,33 +94,106 @@ html[data-theme="dark"] {
 }
 
 /*
- * Kit 0.5.0 workaround: the split's custom properties are declared on the frame root inside the
- * root's own container query, which never matches its own container — so the navy | white gradient and
- * the 44.5 % column were lost. Declared here on the root; they are only read by descendants inside the
- * kit's ≥ 880 px container query (`cqi` resolves where they are used).
+ * Desktop (>= 960 px, hosted): the landing page's checkout card. One two-tone card centred on the canvas:
+ * the navy order side (merchant, item, amount, line items, "How your payment travels") and the light pay
+ * side (Back, flow, "Powered by NearPay"). The kit's full-bleed split is overridden here (these rules are
+ * unlayered, so they win over the kit's container-query rules); `summary` is only passed at this width.
  */
-.ck-frame.np-checkout--page.np-checkout--with-summary {
-  --np-checkout-split: 44.5%;
-  --np-checkout-pay-pad: clamp(32px, 6.5cqi, 96px);
+@media (min-width: 960px) {
+  .ck-frame.np-checkout--page.np-checkout--with-summary > .np-checkout__canvas {
+    justify-content: center;
+    padding: 48px 32px;
+    background: var(--np-color-bg);
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__inner {
+    display: grid;
+    flex: 0 0 auto;
+    /* Rows and areas ("summary top / summary banner / summary main") come from the kit's split. */
+    grid-template-columns: minmax(340px, 37%) minmax(0, 1fr);
+    column-gap: 0;
+    row-gap: var(--np-space-5);
+    width: 100%;
+    max-width: 1000px;
+    min-height: min(620px, calc(100dvh - 96px));
+    margin: 0 auto;
+    padding: 0;
+    border-radius: 24px;
+    background: var(--np-color-surface);
+    box-shadow:
+      0 1px 2px rgb(18 38 63 / 0.06),
+      0 28px 56px -28px rgb(18 38 63 / 0.28);
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__summary {
+    grid-area: summary;
+    gap: 0;
+    padding: 36px 36px 32px;
+    border-radius: 24px 0 0 24px;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__merchant {
+    margin-bottom: 36px;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__amount {
+    margin: 6px 0 28px;
+    font-size: 52px;
+    letter-spacing: -0.045em;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__details {
+    gap: var(--np-space-6);
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__details > .ck-route:last-child {
+    margin-top: auto;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__topbar,
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__banner,
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__main {
+    justify-self: stretch;
+    width: auto;
+    max-width: none;
+    padding-inline: 48px;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__topbar {
+    min-height: 40px;
+    margin: 0;
+    padding-top: 24px;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__secure {
+    margin-left: auto;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__main {
+    gap: var(--np-space-8);
+    padding-bottom: 24px;
+  }
+
+  /* The card carries the merchant; NearPay signs off once, at the bottom ("Powered by NearPay"). */
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__brand {
+    display: none;
+  }
+
+  .ck-frame.np-checkout--page.np-checkout--with-summary .np-checkout__footer {
+    padding-top: var(--np-space-4);
+    border-top: 1px solid var(--np-color-border-subtle);
+  }
 }
 
 /*
  * Split layout: the kit moves Back into the order side ("Back to <merchant>") only once there is an
- * attested merchant; before that (connect a wallet, "Pay with") the top-bar Back stays, in place of
- * the brand.
+ * attested merchant; before that (connect a wallet, "Pay with") the top-bar Back stays.
  */
 .ck-frame.np-checkout--with-summary
   .np-checkout__inner:not(:has(.np-checkout__back-wide))
   .np-checkout__topbar
   > .np-checkout__back {
   display: inline-flex;
-}
-
-.ck-frame.np-checkout--with-summary
-  .np-checkout__inner:not(:has(.np-checkout__back-wide))
-  .np-checkout__topbar:has(> .np-checkout__back)
-  .np-checkout__brand {
-  display: none;
 }
 
 /* The amount hero follows the frame's size (the kit's hero Money has a fixed 48 px). */
@@ -257,6 +330,14 @@ html[data-theme="dark"] .ck-order.np-surface-navy {
   gap: var(--np-space-6);
 }
 
+/* Screen titles and status titles: one size across the flow (the landing card's "Pay with"). */
+.ck-flow .np-checkout__title,
+.ck-flow .np-state__title {
+  font-size: 26px;
+  line-height: 32px;
+  letter-spacing: -0.03em;
+}
+
 /* Titles receive programmatic focus after a step change (not a control: no focus ring). */
 .ck-screen h1[tabindex="-1"]:focus {
   outline: none;
@@ -367,9 +448,10 @@ html[data-theme="dark"] .ck-order.np-surface-navy {
   display: flex;
   flex-direction: column;
   gap: var(--np-space-2);
-  padding: 14px var(--np-space-5);
+  padding: 12px 18px;
   border: 1px solid var(--np-color-border);
-  border-radius: var(--np-radius-card);
+  border-radius: 14px;
+  background: var(--np-color-surface-muted);
 }
 
 .ck-review__choice + .ck-fees {
@@ -646,4 +728,263 @@ html[data-theme="dark"] .ck-order.np-surface-navy {
   font-size: var(--np-text-caption);
   line-height: 16px;
   color: var(--np-color-text-secondary);
+}
+
+/* ---- landing-page look (2026-11-12): logos, route, pickers, quote box, status screens ------------- */
+
+/* Chain and token logos (ui/CryptoIcon.tsx): tokens are coloured discs, chains a bare logo on a neutral tile. */
+.ck-coin {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ck-coin--chain {
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--np-color-border);
+  border-radius: 9px;
+  background: var(--np-color-surface);
+  object-fit: contain;
+}
+
+.ck-coin--chain.ck-coin--letter {
+  padding: 0;
+  border: 0;
+  background: var(--np-color-accent-subtle);
+}
+
+.ck-coin--xs {
+  width: 18px;
+  height: 18px;
+}
+
+.ck-coin--xs.ck-coin--chain {
+  border-radius: 5px;
+}
+
+.ck-coin--xs.ck-coin--letter {
+  font-size: 10px;
+}
+
+.ck-coin--md {
+  width: 36px;
+  height: 36px;
+}
+
+.np-picker__trigger .ck-coin {
+  width: 28px;
+  height: 28px;
+}
+
+.np-picker__trigger .ck-coin--chain {
+  border-radius: 8px;
+}
+
+/* Callout with a logo (manual path: "Send only on Base"). */
+.np-callout > .ck-coin {
+  margin-top: 1px;
+}
+
+/* "How your payment travels": token on network, a dashed arrow down, the merchant's wallet. */
+.ck-route {
+  --ck-route-chip: var(--np-color-neutral-bg);
+  --ck-route-line: var(--np-color-route);
+  display: flex;
+  flex-direction: column;
+  gap: var(--np-space-3);
+  padding: 16px 18px;
+  border: 1px solid var(--np-color-border);
+  border-radius: 16px;
+  background: var(--np-color-surface-muted);
+}
+
+.np-surface-navy .ck-route {
+  --ck-route-chip: var(--np-navy-active);
+  --ck-route-line: var(--np-mint);
+  border-color: var(--np-navy-border);
+  background: var(--np-navy-raised);
+}
+
+.ck-route__title {
+  margin: 0;
+  font-size: var(--np-text-small);
+  line-height: 18px;
+  color: var(--np-color-text-secondary);
+}
+
+.ck-route__stops {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ck-route__stop {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 5px 12px;
+  border-radius: var(--np-radius-pill);
+  background: var(--ck-route-chip);
+  font-size: var(--np-text-small);
+  font-weight: var(--np-weight-semibold);
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.ck-route__stop:has(> .ck-coin) {
+  padding-left: 6px;
+}
+
+.ck-route__stop + .ck-route__stop {
+  margin-top: 26px;
+}
+
+/* The arrow between the stops (decorative). */
+.ck-route__stop + .ck-route__stop::before,
+.ck-route__stop + .ck-route__stop::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  pointer-events: none;
+}
+
+.ck-route__stop + .ck-route__stop::before {
+  top: -23px;
+  height: 17px;
+  border-left: 1.5px dashed var(--ck-route-line);
+}
+
+.ck-route__stop + .ck-route__stop::after {
+  top: -11px;
+  left: 17.25px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid var(--ck-route-line);
+  border-bottom: 1.5px solid var(--ck-route-line);
+  transform: rotate(45deg);
+}
+
+.ck-route__note {
+  margin: 0;
+  font-size: var(--np-text-caption);
+  line-height: 17px;
+  color: var(--np-color-text-tertiary);
+}
+
+/* "Payout address verified for <merchant>": a small mint badge, not a full-width banner. */
+.ck-verified > .np-callout {
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+/* Token rows: logo, symbol, the wallet balance on the right. */
+.np-picker__option .np-picker__title {
+  font-weight: var(--np-weight-semibold);
+}
+
+.ck-balance {
+  color: var(--np-color-text-secondary);
+  font-size: var(--np-text-small);
+  font-weight: var(--np-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.np-picker__option--disabled .ck-coin {
+  opacity: 0.55;
+}
+
+/* Quote box under the pickers: You send (phones), Merchant receives, Network fee. */
+.ck-quote {
+  padding: 12px 18px;
+  border: 1px solid var(--np-color-border);
+  border-radius: 14px;
+  background: var(--np-color-surface-muted);
+}
+
+.ck-quote__rows .np-kv__row,
+.ck-fees__rows .np-kv__row {
+  min-height: 0;
+  padding: 5px 0;
+}
+
+.ck-quote__rows .np-kv__label,
+.ck-quote__rows .np-kv__value {
+  font-size: 15px;
+}
+
+.ck-quote__rows .np-kv__label {
+  color: var(--np-color-text-secondary);
+}
+
+.ck-paywith {
+  gap: 20px;
+}
+
+/* Status screens: the icon in a tinted disc, title and lede centred above the callout and actions. */
+.ck-flow .np-state__head {
+  align-items: center;
+  gap: var(--np-space-3);
+  text-align: center;
+}
+
+.ck-flow .np-state__icon {
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--np-space-1);
+  border-radius: 50%;
+  background: var(--np-color-accent-subtle);
+}
+
+.ck-flow .np-state__icon .np-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.ck-flow .np-state__icon--success {
+  background: var(--np-color-success-bg);
+}
+
+.ck-flow .np-state__icon--warning {
+  background: var(--np-color-warning-bg);
+}
+
+.ck-flow .np-state__icon--danger {
+  background: var(--np-color-danger-bg);
+}
+
+.ck-flow .np-state__icon--neutral {
+  background: var(--np-color-neutral-bg);
+}
+
+.ck-flow .np-state__icon--progress {
+  background: var(--np-color-info-bg);
+  color: var(--np-color-info-fg);
+}
+
+.ck-flow .np-state__lede {
+  max-width: 44ch;
+}
+
+.ck-flow .np-state__actions > .np-checkout__note {
+  text-align: center;
+}
+
+/* Navy order side: secondary labels, the total row. */
+.np-surface-navy .ck-order-lines .np-kv__label {
+  color: var(--np-on-navy-secondary);
+}
+
+.np-surface-navy .ck-order-lines .np-kv__row--total .np-kv__label {
+  color: var(--np-color-text);
 }

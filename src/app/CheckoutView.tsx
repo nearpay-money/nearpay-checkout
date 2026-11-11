@@ -22,6 +22,7 @@ import { StartScreen, WalletConnect } from "../features/wallet-connect/WalletCon
 import { errorText, t } from "../lib/i18n/t";
 import { assetMoney } from "../lib/money/display";
 import { useMediaQuery } from "../ui/useMediaQuery";
+import type { Option } from "./machine";
 import { buildModel, instructionsNetwork, moneyText, type ViewModel } from "./model";
 import { AmountWithLabel, OrderHeader, OrderLines, PaymentRoute, routeFrom, WIDE_QUERY } from "./OrderSummary";
 import {
@@ -37,7 +38,6 @@ import {
   VerifyFailedScreen,
   VerifyingScreen,
 } from "./StatusScreens";
-import type { Option } from "./machine";
 import { canGoBack, INSUFFICIENT_FUNDS, type ScreenId, screenFor } from "./screens";
 import type { Checkout } from "./useCheckout";
 

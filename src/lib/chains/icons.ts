@@ -1,5 +1,5 @@
 /**
- * Which bundled logo (src/assets/crypto/, from `@web3icons/core`, scripts/sync-crypto-icons.mjs) names a chain
+ * Which bundled logo (public/crypto/, from `@web3icons/core`, scripts/sync-crypto-icons.mjs) names a chain
  * or a token. Pure: the UI turns the name into a self-hosted asset URL (`ui/CryptoIcon.tsx`); a null name
  * means "no logo" and the letter avatar is shown instead (never a guessed or remote image).
  */

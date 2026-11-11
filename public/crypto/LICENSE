@@ -1,6 +1,6 @@
 The SVG files in this folder are copied unmodified from the npm package @web3icons/core 4.0.59
-(https://github.com/0xa3k5/web3icons, author 0xa3k5), "background" variant, by
-scripts/sync-crypto-icons.mjs. They are distributed under the MIT License:
+(https://github.com/0xa3k5/web3icons, author 0xa3k5) — "branded" variant for chains, "background"
+variant for tokens — by scripts/sync-crypto-icons.mjs. They are distributed under the MIT License:
 
 MIT License
 
