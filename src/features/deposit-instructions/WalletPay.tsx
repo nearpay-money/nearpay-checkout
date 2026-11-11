@@ -11,7 +11,6 @@
  */
 
 import {
-  Avatar,
   Button,
   Callout,
   ClockIcon,
@@ -35,6 +34,7 @@ import { t } from "../../lib/i18n/t";
 import { assetMoney } from "../../lib/money/display";
 import { roundUpSignificant } from "../../lib/money/format";
 import { ScreenTitle, StateScreen, WalletLine } from "../../ui/blocks";
+import { CryptoIcon } from "../../ui/CryptoIcon";
 import { shortAddress } from "../wallet-connect/wallets";
 
 /** Splits a message around `{time}` so a live `<Countdown>` can sit inside the sentence. */
@@ -66,6 +66,13 @@ function network(c: Checkout): string {
   return a.kind === "intents_transfer" ? "NEAR Intents" : chainName(a.deposit?.chain ?? "");
 }
 
+/** Chain of the attested instructions for its logo ("intents" for NEAR Intents transfers). */
+function networkIconId(c: Checkout): string {
+  const a = c.state.verified?.attestation;
+  if (!a) return "";
+  return a.kind === "intents_transfer" ? "intents" : (a.deposit?.chain ?? "");
+}
+
 /**
  * The chosen option as the "Pay with" cards (kit `PickerTrigger` look): Network and Token, the token
  * with the wallet's balance. Either card goes back to the choice (the former "Change", `change`).
@@ -89,7 +96,7 @@ function ReviewPickers({
       <PickerTrigger
         caption={t("asset.network")}
         value={net}
-        avatar={<Avatar initial={net || "?"} size="sm" />}
+        avatar={<CryptoIcon kind="chain" id={networkIconId(c)} label={net || "?"} />}
         onClick={c.actions.change}
         disabled={disabled}
         aria-label={t("review.changeTrigger", { caption: t("asset.network"), value: net })}
@@ -98,7 +105,7 @@ function ReviewPickers({
       <PickerTrigger
         caption={t("asset.token")}
         value={symbol}
-        avatar={<Avatar initial={symbol || "?"} size="sm" />}
+        avatar={<CryptoIcon kind="token" id={symbol} label={symbol || "?"} />}
         balance={balance ?? undefined}
         selected
         onClick={c.actions.change}
@@ -327,7 +334,7 @@ export function WalletPay({
     return (
       <section className="ck-screen" data-testid="wallet-pay">
         <SelectionCard
-          avatar={symbol || "?"}
+          avatar={<CryptoIcon kind="token" id={symbol} label={symbol || "?"} />}
           title={`${symbol} · ${network(c)}`}
           description={t("funds.needed", { amount: total })}
         />

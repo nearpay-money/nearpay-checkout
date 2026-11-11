@@ -27,8 +27,10 @@ import {
 import { useMediaQuery } from "./useMediaQuery";
 
 export interface PickerItem extends PickerItemBase {
-  /** Avatar initial (defaults to the label's first letter). */
+  /** Avatar initial (defaults to the label's first letter); used when there is no `icon`. */
   readonly avatar?: string | undefined;
+  /** Leading logo (chain or token icon) in place of the letter avatar, in the row and the trigger. */
+  readonly icon?: ReactNode;
   /** Right-aligned content, e.g. the wallet balance. */
   readonly trailing?: ReactNode;
   /** Shorter label for the closed trigger (defaults to `label`). */
@@ -222,7 +224,7 @@ export function Picker({
         onPointerMove={() => !item.disabled && item.value !== active && setActive(item.value)}
         data-testid={item.testId}
       >
-        <Avatar initial={item.avatar ?? item.label} size="sm" />
+        {item.icon ?? <Avatar initial={item.avatar ?? item.label} size="sm" />}
         <span className="np-picker__text">
           <span className="np-picker__title">{item.label}</span>
           {item.description ? <span className="np-picker__sub">{item.description}</span> : null}
@@ -244,7 +246,9 @@ export function Picker({
         caption={<span id={labelId}>{label}</span>}
         value={selected ? (selected.triggerLabel ?? selected.label) : null}
         placeholder={placeholder}
-        avatar={selected ? <Avatar initial={selected.avatar ?? selected.label} size="sm" /> : undefined}
+        avatar={
+          selected ? (selected.icon ?? <Avatar initial={selected.avatar ?? selected.label} size="sm" />) : undefined
+        }
         balance={
           selected && triggerBalance != null ? (
             <>

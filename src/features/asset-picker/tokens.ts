@@ -153,3 +153,7 @@ export function formatBalance(amount: string, decimals: number): string {
 export function formatNeeded(amount: string, decimals: number, symbol: string): string {
   return `${formatSignificant(amount, decimals, "ceil")} ${symbol}`;
 }
+
+/** Indicative amount of an option for display ("0.006921 ETH"), rounded up; null when the server has none. */
+export const estimateText = (o: Option): string | null =>
+  o.estimated_amount_in ? formatNeeded(o.estimated_amount_in, o.decimals, o.symbol) : null;

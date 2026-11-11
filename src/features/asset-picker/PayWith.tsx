@@ -1,6 +1,10 @@
 /**
  * "Pay with" (choose_asset): a network dropdown and a token dropdown (side by side from 640 px), the
- * indicative amount of the chosen option and Continue. Both dropdowns search inside their own panel
+ * quote box (Merchant receives, Network fee; "You send" on phones, where the order summary is collapsed —
+ * on desktop the navy order side shows it) and Continue. The network list names chains only (one row per
+ * chain, its logo); the token list shows a token's logo, symbol and — with a wallet connected — its
+ * balance, nothing else unless the row can't be picked (the reason). When no option can be used at all,
+ * one message replaces the dropdowns (`allUnavailableReason`). Both dropdowns search inside their own panel
  * and scroll inside it, so the screen stays about one viewport tall however many routes exist.
  *
  * With a wallet connected (live mode) the token list shows only the tokens that wallet holds on the
@@ -10,17 +14,18 @@
  * Continue: the wallet path prepares the payment (attempt + sentinel verification → review), the
  * manual path opens "Send from another wallet".
  */
-import { Button, Skeleton } from "@nearpay-internal/ui";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Button, Callout, KeyValueList, Skeleton } from "@nearpay-internal/ui";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import type { ConnectedWallet, Option } from "../../app/machine";
 import type { WalletReads } from "../../app/useCheckout";
 import { chainName } from "../../lib/chains/chains";
 import { hasMessage, t } from "../../lib/i18n/t";
 import { ScreenTitle, WalletLine } from "../../ui/blocks";
+import { CryptoIcon } from "../../ui/CryptoIcon";
 import { Picker, type PickerItem } from "../../ui/Picker";
 import { shortAddress } from "../wallet-connect/wallets";
-import { defaultNetwork, INTENTS_NETWORK, networkKey, networksOf, optionKey, optionNetwork } from "./options";
-import { type BalanceRead, formatBalance, formatNeeded, rowSelectable, type TokenRow, tokenRows } from "./tokens";
+import { allUnavailableReason, defaultNetwork, INTENTS_NETWORK, networkKey, networksOf, optionKey } from "./options";
+import { type BalanceRead, estimateText, formatBalance, rowSelectable, type TokenRow, tokenRows } from "./tokens";
 
 /** Balance reads that take longer fall back to the full list. */
 export const BALANCE_TIMEOUT_MS = 8000;
@@ -30,40 +35,39 @@ const POPULAR = 4;
 
 type Balance = { readonly state: "loading" } | { readonly state: "error" } | BalanceRead;
 
-/** Indicative amount, 6 significant digits rounded up (never understated). */
-const estimateText = (o: Option): string | null =>
-  o.estimated_amount_in ? formatNeeded(o.estimated_amount_in, o.decimals, o.symbol) : null;
-
 function unavailableText(o: Option): string {
   const key = `asset.unavailable.${o.reason ?? "route_unavailable"}`;
   return hasMessage(key) ? t(key) : t("asset.unavailable.route_unavailable");
 }
 
-function rowDescription(r: TokenRow): string {
-  const o = r.option;
-  // Intents transfers are paid from the NEAR Intents balance, never from the wallet's own tokens: every
-  // line of such a row says so (also "Not enough", which otherwise reads like a wallet balance).
-  const prefix = o.method === "intents_transfer" ? `${t("asset.intents")} · ` : "";
-  if (!o.available) return `${prefix}${unavailableText(o)}`;
-  const est = estimateText(o);
-  if (r.short && est) return `${prefix}${t("asset.notEnough")} · ${t("asset.needed", { amount: est })}`;
-  return `${prefix}${est ? t("asset.estimate", { amount: `≈ ${est}` }) : t("asset.estimateUnknown")}`;
+/** The one message shown when no option can be used (keyed off the shared reason). */
+export function allUnavailableText(reason: string): string {
+  const key = `asset.allUnavailable.${reason}`;
+  return hasMessage(key) ? t(key) : t("asset.allUnavailable.route_unavailable");
 }
 
-function rowLabel(r: TokenRow): string {
-  const o = r.option;
-  if (r.balance !== null) return `${o.symbol} · ${formatBalance(r.balance, o.decimals)}`;
-  return r.unavailable ? `${o.symbol} · ${t("asset.balanceUnavailable")}` : o.symbol;
+/** Second line of a token row: only why it can't be picked, or that its balance couldn't be read. */
+function rowNote(r: TokenRow): string | undefined {
+  if (!r.option.available) return unavailableText(r.option);
+  if (r.short) return t("asset.notEnough");
+  if (r.unavailable) return t("asset.balanceUnavailable");
+  return undefined;
 }
 
 function tokenItem(r: TokenRow, network: string): PickerItem {
   const o = r.option;
   return {
     value: optionKey(o),
-    label: rowLabel(r),
-    triggerLabel: o.symbol,
-    avatar: o.symbol,
-    description: rowDescription(r),
+    label: o.symbol,
+    icon: <CryptoIcon kind="token" id={o.symbol} />,
+    trailing:
+      r.balance !== null ? (
+        <span className="ck-balance">
+          <span className="np-sr-only">{t("asset.balanceLabel")} </span>
+          {formatBalance(r.balance, o.decimals)}
+        </span>
+      ) : undefined,
+    description: rowNote(r),
     keywords: [network, o.chain],
     disabled: !rowSelectable(r),
     testId: `option-${o.method}-${o.origin_asset_id}`,
@@ -85,6 +89,12 @@ export interface PayWithProps {
   preferKey?: string | null;
   /** Formatted wallet balances (by option key) of the network just read, for the review's token card. */
   onBalances?: (balances: ReadonlyMap<string, string>) => void;
+  /** The option currently chosen in the dropdowns (null: none), for the order side's "You send". */
+  onChoice?: (o: Option | null) => void;
+  /** "Merchant receives" in the quote box: the price. */
+  merchantReceives: ReactNode;
+  /** Desktop split layout: the order side shows "You send", so the quote box leaves it out. */
+  wide: boolean;
 }
 
 export function PayWith({
@@ -97,6 +107,9 @@ export function PayWith({
   walletReads,
   preferKey = null,
   onBalances,
+  onChoice,
+  merchantReceives,
+  wide,
 }: PayWithProps) {
   const all = useMemo(() => options ?? [], [options]);
   const networks = useMemo(() => networksOf(all), [all]);
@@ -177,7 +190,9 @@ export function PayWith({
       return {
         value: n.key,
         label: n.key === INTENTS_NETWORK ? t("network.intents") : n.label,
-        description: available ? symbols.join(", ") : unavailableText(opts[0] as Option),
+        icon: <CryptoIcon kind="chain" id={n.key} label={n.label} />,
+        // Chain names only; a row that can't be picked says why.
+        description: available ? undefined : unavailableText(opts[0] as Option),
         keywords: [...symbols, n.key],
         disabled: !available,
         group: grouped
@@ -195,6 +210,39 @@ export function PayWith({
 
   const chainOf = balance?.state === "wrong_chain" ? balance.chain : null;
   const estimate = selected ? estimateText(selected) : null;
+  const paused = allUnavailableReason(all);
+
+  useEffect(() => {
+    onChoice?.(selected);
+  }, [selected, onChoice]);
+
+  const quoteRows = [
+    ...(!wide && selected
+      ? [
+          {
+            label: t("summary.youSend"),
+            value: estimate ? (
+              <span data-testid="selected-estimate">{t("asset.youSendAbout", { amount: estimate })}</span>
+            ) : (
+              <span className="np-text-secondary">{t("asset.estimateUnknown")}</span>
+            ),
+          },
+        ]
+      : []),
+    { label: t("fees.merchant"), value: <span data-testid="quote-merchant">{merchantReceives}</span> },
+    {
+      label: t("fees.networkShort"),
+      value: (
+        <span className="np-text-secondary" data-testid="quote-network-fee">
+          {selected?.method === "intents_transfer"
+            ? t("fees.networkNone")
+            : wallet
+              ? t("fees.networkWallet")
+              : t("fees.networkSender")}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <section className="ck-screen ck-paywith" data-testid="asset-picker" aria-labelledby="ck-paywith-title">
@@ -207,6 +255,8 @@ export function PayWith({
           <Skeleton shape="block" />
           <Skeleton shape="block" />
         </div>
+      ) : paused ? (
+        <Callout tone="warning" title={allUnavailableText(paused)} live data-testid="all-unavailable" />
       ) : (
         <div className="np-pickers">
           <Picker
@@ -304,29 +354,31 @@ export function PayWith({
           </button>
         </p>
       ) : null}
-      {selected && estimate ? (
-        <p className="np-checkout__note" data-testid="selected-estimate">
-          {selected.method === "intents_transfer" ? `${t("asset.intents")}. ` : ""}
-          {t("asset.summary", { amount: estimate, network: optionNetwork(selected) })}
-        </p>
-      ) : null}
-      <div className="np-stack np-stack--sm">
-        <Button
-          fullWidth
-          disabled={!selected || busy || loadingBalances}
-          loading={selected !== null && pendingKey === optionKey(selected) && (busy || needsChallenge)}
-          loadingText={t("verify.button")}
-          onClick={() => selected && onPick(selected)}
-          data-testid="asset-continue"
-        >
-          {t("asset.continue")}
-        </Button>
-        {needsChallenge ? (
-          <p className="np-checkout__note" role="status">
-            {t("asset.checking")}
-          </p>
-        ) : null}
-      </div>
+      {paused ? null : (
+        <div className="ck-quote" data-testid="quote-box">
+          <KeyValueList className="ck-quote__rows" items={quoteRows} />
+        </div>
+      )}
+      {paused ? null : (
+        <div className="np-stack np-stack--sm">
+          <Button
+            fullWidth
+            size="lg"
+            disabled={!selected || busy || loadingBalances}
+            loading={selected !== null && pendingKey === optionKey(selected) && (busy || needsChallenge)}
+            loadingText={t("verify.button")}
+            onClick={() => selected && onPick(selected)}
+            data-testid="asset-continue"
+          >
+            {t("asset.continue")}
+          </Button>
+          {needsChallenge ? (
+            <p className="np-checkout__note" role="status">
+              {t("asset.checking")}
+            </p>
+          ) : null}
+        </div>
+      )}
     </section>
   );
 }

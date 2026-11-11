@@ -13,6 +13,7 @@ import { chainName, walletAsset } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { assetMoney, receivedSoFar, walletTokenHint } from "../../lib/money/display";
 import { CopyTextButton, ScreenTitle } from "../../ui/blocks";
+import { CryptoIcon } from "../../ui/CryptoIcon";
 import { paymentUri, qrPayload } from "./qr";
 import { withCountdown } from "./WalletPay";
 
@@ -96,7 +97,12 @@ export function ManualInstructions({ c, vm, topUp }: { c: Checkout; vm: ViewMode
         />
       )}
       {c.state.replacedAttempt ? <Callout tone="warning" title={t("deposit.replaced")} data-testid="replaced" /> : null}
-      <Callout tone="warning" title={t("deposit.networkTitle", { chain })} data-testid="network">
+      <Callout
+        tone="warning"
+        icon={<CryptoIcon kind="chain" id={d.chain} label={chain} size="xs" />}
+        title={t("deposit.networkTitle", { chain })}
+        data-testid="network"
+      >
         {t("deposit.networkBody", { token: symbol || d.origin_asset_id, chain })}
       </Callout>
       <Checkbox

@@ -106,3 +106,15 @@ export function filterOptions(options: readonly Option[], query: string, network
     return words.every((w) => hay.includes(w));
   });
 }
+
+/**
+ * When options were offered but none can be used now: the one reason they share (`route_too_slow`,
+ * `amount_too_low`, `pricing_unavailable`, `route_unavailable` or a newer server reason), or
+ * `route_unavailable` when the reasons differ — "Pay with" then shows one message instead of a reason on
+ * every row. Null while any option is usable, or when there are no options (the "no options" screen).
+ */
+export function allUnavailableReason(options: readonly Option[]): string | null {
+  if (options.length === 0 || options.some((o) => o.available)) return null;
+  const reasons = new Set(options.map((o) => o.reason ?? "route_unavailable"));
+  return reasons.size === 1 ? ([...reasons][0] as string) : "route_unavailable";
+}

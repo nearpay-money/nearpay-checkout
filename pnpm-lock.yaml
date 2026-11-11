@@ -68,6 +68,9 @@ importers:
       "@vitest/coverage-v8":
         specifier: 2.1.9
         version: 2.1.9(vitest@2.1.9(@types/node@22.20.5))
+      "@web3icons/core":
+        specifier: 4.0.59
+        version: 4.0.59
       typescript:
         specifier: 5.9.3
         version: 5.9.3
@@ -645,6 +648,14 @@ packages:
     resolution:
       { integrity: sha512-gggIHTtxicF9XFMQ12DkfS6NAG92Ak795JeSA7f2whAQ6Y3AkMWWuCMxSZXG2NIPN42kEaZSNVjqMsJRaJRxMQ== }
     engines: { node: ">=22" }
+
+  "@web3icons/common@0.11.54":
+    resolution:
+      { integrity: sha512-zrVHK3E/spo2v2HOqgQWOsQb4X8aRpGOZYdfi3Ev228zw8f5X5D8Il4IegD+qR0a/AKZaoXa/HRvOqysKW3jBQ== }
+
+  "@web3icons/core@4.0.59":
+    resolution:
+      { integrity: sha512-Czg1K9dXQl/VAcDdr5HYZ+WLFylYpbLoo61KURPR7Tl4r1u0iZpyATyswJcGBREK3GGy8URPiBgfo+49GXAZOQ== }
 
   ansi-regex@5.0.1:
     resolution:
@@ -1486,6 +1497,12 @@ snapshots:
       "@wallet-standard/base": 1.1.1
 
   "@wallet-standard/base@1.1.1": {}
+
+  "@web3icons/common@0.11.54": {}
+
+  "@web3icons/core@4.0.59":
+    dependencies:
+      "@web3icons/common": 0.11.54
 
   ansi-regex@5.0.1: {}
 

@@ -8,9 +8,10 @@
  * Who is paid is only ever the ATTESTED merchant (§5.2, L-CK-03): callers pass `merchant` from a
  * verified attestation or nothing; the route then ends at "The merchant's wallet".
  */
-import { Avatar, cx, type KeyValueItem, KeyValueList, RouteDiagram } from "@nearpay-internal/ui";
-import type { ReactNode } from "react";
+import { Avatar, cx, type KeyValueItem, KeyValueList } from "@nearpay-internal/ui";
+import { type ReactNode, useId } from "react";
 import { t } from "../lib/i18n/t";
+import { CryptoIcon } from "../ui/CryptoIcon";
 
 /** Desktop split from this width (owner brief: ≥ 960 px; below it the single-column layout). */
 export const WIDE_QUERY = "(min-width: 960px)";
@@ -21,17 +22,36 @@ export function OrderLines({ items }: { items: readonly KeyValueItem[] }) {
 }
 
 /**
- * "How your payment travels: USDC on Base → Acme GmbH's wallet". `from` is the chosen or attested
- * token and network (null before a choice), `merchant` the attested name (null before verification).
+ * "How your payment travels": the chosen or attested token and network (`from`, null before a choice)
+ * above the attested merchant's wallet (`merchant`, null before verification), joined by a dashed arrow
+ * (decorative CSS, never text), then the non-custody note. `token` adds that token's logo to the first stop.
  */
-export function PaymentRoute({ from, merchant }: { from: string | null; merchant: string | null }) {
+export function PaymentRoute({
+  from,
+  merchant,
+  token = null,
+}: {
+  from: string | null;
+  merchant: string | null;
+  token?: string | null;
+}) {
+  const titleId = useId();
   return (
-    <RouteDiagram
-      className="ck-route"
-      title={t("route.title")}
-      stops={[from ?? t("route.fromAny"), merchant ? t("route.to", { merchant }) : t("route.toUnknown")]}
-      note={t("route.note")}
-    />
+    <section className="ck-route" aria-labelledby={titleId} data-testid="payment-route">
+      <p className="ck-route__title" id={titleId}>
+        {t("route.title")}
+      </p>
+      <ol className="ck-route__stops">
+        <li className="ck-route__stop">
+          {from && token ? <CryptoIcon kind="token" id={token} size="xs" /> : null}
+          <span>{from ?? t("route.fromAny")}</span>
+        </li>
+        <li className="ck-route__stop">
+          <span>{merchant ? t("route.to", { merchant }) : t("route.toUnknown")}</span>
+        </li>
+      </ol>
+      <p className="ck-route__note">{t("route.note")}</p>
+    </section>
   );
 }
 
