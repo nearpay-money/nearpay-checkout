@@ -69,7 +69,7 @@ are shown as unavailable.
 ## Tests
 
 ```
-pnpm test           # unit (Vitest), shared @nearpay/spec test vectors
+pnpm test           # unit (Vitest), shared @nearpay-money/spec test vectors
 pnpm coverage       # + coverage gate (90 % branches on the money-path and state modules)
 pnpm e2e            # vite build --mode e2e → dist-e2e/, then Playwright against an in-process mock
 pnpm verify         # typecheck + lint + coverage + build + e2e
@@ -107,7 +107,7 @@ polling), test mode. WalletConnect is not built yet.
 
 ## Built with
 
-Vite, React, TypeScript, `@nearpay-internal/ui` (NearPay design system, DM Sans self-hosted), zod + `@nearpay/spec`, `@noble/curves` / `@noble/hashes` (Ed25519, SHA-256,
+Vite, React, TypeScript, `@nearpay-internal/ui` (NearPay design system, DM Sans self-hosted), zod + `@nearpay-money/spec`, `@noble/curves` / `@noble/hashes` (Ed25519, SHA-256,
 keccak), `canonicalize` (RFC 8785), `bs58`, `uqr` (QR codes), `@hot-labs/near-connect` (NEAR wallets,
 lazy-loaded), Cloudflare Turnstile (runtime script), Vitest, Playwright, Biome. Code and documentation
 are written with AI assistance (Claude) under human direction and review.

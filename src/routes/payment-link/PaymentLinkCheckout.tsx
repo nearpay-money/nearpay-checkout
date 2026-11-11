@@ -6,8 +6,8 @@
  * rendered (L-CK-03): who is paid is shown from the sentinel attestation, as in every session.
  */
 
-import { createPaymentLinkSession, getPublicPaymentLink, type PublicPaymentLink } from "@nearpay/spec";
 import { Button, Callout, CheckoutFrame, Field, Input, Money, WarningIcon } from "@nearpay-internal/ui";
+import { createPaymentLinkSession, getPublicPaymentLink, type PublicPaymentLink } from "@nearpay-money/spec";
 import { useCallback, useEffect, useState } from "react";
 import type { z } from "zod";
 import { AmountWithLabel, OrderHeader, OrderLines, PaymentRoute, WIDE_QUERY } from "../../app/OrderSummary";

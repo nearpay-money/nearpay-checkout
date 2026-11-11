@@ -4,7 +4,7 @@
  * these events. The machine never shows instructions without a successful verification: the only way
  * into `pay_wallet` / `pay_manual` / `needs_top_up` is the `verified` event for the current attempt.
  */
-import type { PaymentOption } from "@nearpay/spec";
+import type { PaymentOption } from "@nearpay-money/spec";
 import type { z } from "zod";
 import type { AttemptSnapshot, IntentSnapshot, SessionSnapshot } from "../features/status-stream/stream";
 import type { VerifiedInstructions, VerifyFailure } from "../lib/integrity/verify";

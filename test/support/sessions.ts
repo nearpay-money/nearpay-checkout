@@ -1,5 +1,5 @@
 /** Spec-valid payer objects for unit and e2e tests. */
-import type { IntentStreamEvent, PayerAttempt, PublicCheckoutSession } from "@nearpay/spec";
+import type { IntentStreamEvent, PayerAttempt, PublicCheckoutSession } from "@nearpay-money/spec";
 import type { z } from "zod";
 
 export type Session = z.output<typeof PublicCheckoutSession>;

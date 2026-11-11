@@ -1,6 +1,6 @@
 /** Hosted invoice auto-pay (Stage 4, §4.4): funding checks before signing, mandate view, payer transactions. */
 
-import { MANDATE_FUNDING_PAYER_NOTICE, MandateFundingInstructions, PublicMandate, VaultMsg } from "@nearpay/spec";
+import { MANDATE_FUNDING_PAYER_NOTICE, MandateFundingInstructions, PublicMandate, VaultMsg } from "@nearpay-money/spec";
 import { describe, expect, it } from "vitest";
 import { autopayEn } from "../../src/lib/i18n/messages.autopay.en";
 import { registerMessages, t } from "../../src/lib/i18n/t";

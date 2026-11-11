@@ -1,6 +1,6 @@
 /** Which payment options a path can use (lld/checkout-and-js.md §3 `asset-picker`), search and network filter. */
 
-import { parseOmftAssetId, SOLANA_MAINNET } from "@nearpay/spec";
+import { parseOmftAssetId, SOLANA_MAINNET } from "@nearpay-money/spec";
 import type { Option, Path } from "../../app/machine";
 import { chainName, walletAsset } from "../../lib/chains/chains";
 

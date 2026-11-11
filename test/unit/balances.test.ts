@@ -1,5 +1,5 @@
 /** Token picker balances: targets per wallet family, filtering and ordering, formatting, and the reads. */
-import { INTENTS_CONTRACT } from "@nearpay/spec";
+import { INTENTS_CONTRACT } from "@nearpay-money/spec";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Option } from "../../src/app/machine";
 import { readBalances } from "../../src/features/asset-picker/balance-reads";

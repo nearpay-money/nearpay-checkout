@@ -1,4 +1,4 @@
-import { MultiPayload } from "@nearpay/spec";
+import { MultiPayload } from "@nearpay-money/spec";
 import { USDC_BASE, USDC_NEAR } from "../support/sessions";
 import { expect, test } from "./support/fixtures";
 import { choose } from "./support/pay";

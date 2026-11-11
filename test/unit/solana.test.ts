@@ -11,9 +11,9 @@ import {
   parseOmftAssetId,
   SOLANA_MAINNET,
   solanaPayUri,
-} from "@nearpay/spec";
-import chains from "@nearpay/spec/test-vectors/chains-solana-bitcoin.json";
-import v from "@nearpay/spec/test-vectors/solana-transfer.json";
+} from "@nearpay-money/spec";
+import chains from "@nearpay-money/spec/test-vectors/chains-solana-bitcoin.json";
+import v from "@nearpay-money/spec/test-vectors/solana-transfer.json";
 import bs58 from "bs58";
 import { describe, expect, it } from "vitest";
 import { contentSecurityPolicy, resolveConfig } from "../../build/config";

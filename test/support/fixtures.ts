@@ -6,7 +6,7 @@ import canonicalize from "canonicalize";
 
 const require = createRequire(import.meta.url);
 export function vector<T>(name: string): T {
-  return JSON.parse(readFileSync(require.resolve(`@nearpay/spec/test-vectors/${name}`), "utf8")) as T;
+  return JSON.parse(readFileSync(require.resolve(`@nearpay-money/spec/test-vectors/${name}`), "utf8")) as T;
 }
 
 export interface SignedVector {

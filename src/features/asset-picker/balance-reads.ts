@@ -8,7 +8,7 @@
  * selectable, never hidden as if empty); when every read fails (or the chain can't be read) it rejects
  * and the picker falls back to the full list.
  */
-import { INTENTS_CONTRACT } from "@nearpay/spec";
+import { INTENTS_CONTRACT } from "@nearpay-money/spec";
 import type { Option } from "../../app/machine";
 import { erc20BalanceOf, nativeBalance, walletChainId } from "../../wallets/evm/reads";
 import { availableNear, ftBalanceOf, mtBalanceOf } from "../../wallets/near/balances";

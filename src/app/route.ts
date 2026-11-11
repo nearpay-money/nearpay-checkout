@@ -1,5 +1,5 @@
 /** Routes of the static SPA (§1): `/c/:id` hosted, `/embed/:id` iframe, `/l/:id` links, `/i/:id` invoices. */
-import { ClientSecretHeaders, idPattern } from "@nearpay/spec";
+import { ClientSecretHeaders, idPattern } from "@nearpay-money/spec";
 
 export type Route =
   | { readonly kind: "hosted" | "embed"; readonly sessionId: string; readonly secret: string | null }

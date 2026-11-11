@@ -6,12 +6,12 @@ Scope: Hosted checkout, payment links, hosted invoices and the embedded iframe a
 ## Before changing anything
 
 1. Read `../nearpay-brain/AGENTS.md`, then this repo's LLD (`../nearpay-brain/lld/checkout-and-js.md`) — it is the implementation spec; do not make design decisions it already makes.
-2. Contracts (requests, responses, events, errors) come from `@nearpay/spec`. If one must change, open a PR in `nearpay-spec` first; never hand-write contract types here.
+2. Contracts (requests, responses, events, errors) come from `@nearpay-money/spec`. If one must change, open a PR in `nearpay-spec` first; never hand-write contract types here.
 3. Check your change against invariants INV-1…INV-9 in `nearpay-brain/product/requirements.md`.
 
 ## Rules for this repo
 
-- Talk only to the public API via `@nearpay/spec` types; no secrets in the bundle.
+- Talk only to the public API via `@nearpay-money/spec` types; no secrets in the bundle.
 - Strict CSP (nonces, no `unsafe-inline`); no third-party runtime scripts unless listed in ADR-0010.
 
 ## Never

@@ -1,5 +1,5 @@
 /** Hosted invoices (Stage 3): route parsing, display logic, invoice-secret transport, binary PDF. */
-import { createPublicInvoiceSession, getPublicInvoice, getPublicInvoicePdf } from "@nearpay/spec";
+import { createPublicInvoiceSession, getPublicInvoice, getPublicInvoicePdf } from "@nearpay-money/spec";
 import { describe, expect, it, vi } from "vitest";
 import { parseRoute } from "../../src/app/route";
 import { call, callBinary, isApiError } from "../../src/lib/api/client";

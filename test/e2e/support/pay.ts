@@ -3,7 +3,7 @@
  * network, then its token, then Continue — what a payer does with the mouse.
  */
 
-import { SOLANA_MAINNET } from "@nearpay/spec";
+import { SOLANA_MAINNET } from "@nearpay-money/spec";
 import { expect, type FrameLocator, type Page } from "@playwright/test";
 import { USDC_BASE, USDC_NEAR } from "../../support/sessions";
 
