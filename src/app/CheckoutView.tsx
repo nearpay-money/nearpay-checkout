@@ -4,9 +4,11 @@
  * frame (merchant, amount hero, order summary, test-mode banner, back) and the per-screen UI state
  * (search, refund address, Turnstile token, the "still confirming" timer).
  *
- * Design v2: from 960 px the hosted page is the split layout — the navy order side (attested merchant,
- * item, amount, line items with "You send", "How your payment travels") and the white pay side; below
- * it one column with the order summary collapsed into a header + "Order details" (`OrderHeader`).
+ * Landing-page look (2026-11-12, nearpay-site showcase checkout card): from 960 px the hosted page is one
+ * two-tone card on the canvas — the navy order side (attested merchant, item, amount, line items with
+ * "You send" — on "Pay with" the chosen token's indicative amount —, "How your payment travels") and the
+ * light pay side; below it one column with the order summary collapsed into a navy header + "Order
+ * details" (`OrderHeader`).
  */
 import { Callout, CheckoutFrame, type KeyValueItem, Money, Skeleton } from "@nearpay-internal/ui";
 import { lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
