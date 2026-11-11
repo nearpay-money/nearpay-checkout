@@ -28,13 +28,18 @@ test("manual path in test mode: verified merchant, guarded address, simulate, su
   // Best route preselected (Base · USDC) with its indicative amount (6 significant digits, rounded up);
   // Ethereum is listed but unavailable.
   await expect(page.getByTestId("selected-estimate")).toContainText("2.00502 USDC");
+  await expect(page.getByTestId("quote-merchant")).toHaveText("$2.00");
+  await expect(page.getByTestId("quote-network-fee")).toHaveText("Charged by your wallet or exchange");
   await page.getByTestId("network-picker-trigger").click();
+  // Chain names only (no token list under a network); an unavailable one says why.
+  await expect(page.getByTestId("network-eip155:8453")).toHaveText("Base");
   await expect(page.getByTestId("network-eip155:1")).toContainText("Too slow");
   await expect(page.getByTestId("network-eip155:1")).toHaveAttribute("aria-disabled", "true");
   await expect(page.getByTestId("network-intents")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.getByTestId("token-picker-trigger").click();
-  await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`)).toContainText("≈ 2.00502 USDC");
+  // Token rows carry no fee or estimate text.
+  await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`)).toHaveText("USDC");
   await expect(page.getByTestId(`option-intents_transfer-${USDC_NEAR}`)).toHaveCount(0);
   await page.keyboard.press("Escape");
   await choose(page, "route_quote", USDC_BASE);

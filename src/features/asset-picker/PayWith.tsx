@@ -63,7 +63,7 @@ function tokenItem(r: TokenRow, network: string): PickerItem {
     trailing:
       r.balance !== null ? (
         <span className="ck-balance">
-          <span className="np-sr-only">{t("asset.balanceLabel")} </span>
+          <span className="np-sr-only">, {t("asset.balanceLabel")} </span>
           {formatBalance(r.balance, o.decimals)}
         </span>
       ) : undefined,
