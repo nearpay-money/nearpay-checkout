@@ -3,8 +3,8 @@
  * (`ethereum:<token>@<chainId>/transfer?address=<deposit>&uint256=<amount_in>`), Solana Pay transfer
  * requests and BIP-21 URIs (Stage 4), the plain address otherwise. Built only from attested instructions.
  */
-import type { Attestation } from "@nearpay/spec";
-import { BITCOIN_MAINNET, bip21Uri, parseOmftAssetId, SOLANA_MAINNET, solanaPayUri } from "@nearpay/spec";
+import type { Attestation } from "@nearpay-money/spec";
+import { BITCOIN_MAINNET, bip21Uri, parseOmftAssetId, SOLANA_MAINNET, solanaPayUri } from "@nearpay-money/spec";
 import type { WalletAsset } from "../../lib/chains/chains";
 import { isSolanaAddress, SOL_ASSET_ID, splAssetToken } from "../../wallets/solana/tx";
 

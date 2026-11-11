@@ -1,5 +1,5 @@
 /**
- * Chains the checkout can name and (for EVM/NEAR) pay on. CAIP-2 ids as in `@nearpay/spec`; the list
+ * Chains the checkout can name and (for EVM/NEAR) pay on. CAIP-2 ids as in `@nearpay-money/spec`; the list
  * mirrors the kit chain registry (lld/00-foundations.md §4) for display, address validation and the
  * wallet path. Unknown chains still work on the manual path (generic name, no validation shortcuts).
  */

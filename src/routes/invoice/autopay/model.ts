@@ -12,6 +12,7 @@
  * Money stays base-unit strings (INV-5).
  */
 
+import type { MoneyFormatOptions } from "@nearpay-internal/ui";
 import {
   type MandateFundingInstructions,
   type NearTransactionRequest,
@@ -19,8 +20,7 @@ import {
   type PublicMandate,
   VAULT_PERIOD_SECS_PER_INTERVAL,
   VaultMsg,
-} from "@nearpay/spec";
-import type { MoneyFormatOptions } from "@nearpay-internal/ui";
+} from "@nearpay-money/spec";
 import type { z } from "zod";
 import type { MessageKey } from "../../../lib/i18n/messages.en";
 import type { FunctionCallAction, NearTransaction } from "../../../wallets/near/tx";

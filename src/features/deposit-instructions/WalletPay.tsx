@@ -10,7 +10,6 @@
  * price-hold countdown.
  */
 
-import { formatBaseUnits } from "@nearpay/spec";
 import {
   Avatar,
   Button,
@@ -26,6 +25,7 @@ import {
   WalletIcon,
   WarningIcon,
 } from "@nearpay-internal/ui";
+import { formatBaseUnits } from "@nearpay-money/spec";
 import type { ReactNode } from "react";
 import { moneyText, referenceText, type ViewModel } from "../../app/model";
 import type { ScreenId } from "../../app/screens";

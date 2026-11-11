@@ -1,13 +1,13 @@
 /**
  * Typed client for the public payer routes (`client_secret`) and the sentinel co-signing route, built
- * from the `@nearpay/spec` route tables (lld/checkout-and-js.md §3 `src/lib/api`). Requests are checked
+ * from the `@nearpay-money/spec` route tables (lld/checkout-and-js.md §3 `src/lib/api`). Requests are checked
  * against the route's request schemas before they leave; responses are parsed with the response
  * schemas, tolerating unknown fields and unknown open-enum values (api-conventions §5).
  *
  * The client secret travels only in the `X-NearPay-Client-Secret` header and the invoice secret only in
  * `X-NearPay-Invoice-Secret` (hosted invoices, Stage 3); neither is ever logged or put in a URL.
  */
-import { type AnyRoute, buildPath, HEADERS, type RouteResponse, safeParseTolerant } from "@nearpay/spec";
+import { type AnyRoute, buildPath, HEADERS, type RouteResponse, safeParseTolerant } from "@nearpay-money/spec";
 import type { z } from "zod";
 import { config } from "../../config";
 

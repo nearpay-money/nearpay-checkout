@@ -5,8 +5,9 @@
  * spec 0.2.0, CR-15-07 — verified to describe the paid asset), else from the payment options (not
  * attested; lld/checkout-and-js.md §10). Displayed totals are always the ATTESTED amounts.
  */
-import type { Attestation } from "@nearpay/spec";
+
 import type { MoneyFormatOptions } from "@nearpay-internal/ui";
+import type { Attestation } from "@nearpay-money/spec";
 import { currencyExponent } from "./format";
 
 export interface AssetMeta {

@@ -4,8 +4,8 @@
  * (`NP_SHOTS=/home/claude/shots/checkout-4.3 pnpm exec playwright test screens-4.3`).
  */
 
-import { SOLANA_MAINNET } from "@nearpay/spec";
-import v from "@nearpay/spec/test-vectors/solana-transfer.json" with { type: "json" };
+import { SOLANA_MAINNET } from "@nearpay-money/spec";
+import v from "@nearpay-money/spec/test-vectors/solana-transfer.json" with { type: "json" };
 import type { Page } from "@playwright/test";
 import { mandate, withdrawTx } from "../support/mandates";
 import { expect, test } from "./support/fixtures";

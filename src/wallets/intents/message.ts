@@ -4,7 +4,7 @@
  * binding — signed by the payer's wallet: NEP-413 for NEAR wallets, ERC-191 `personal_sign` for EVM
  * wallets (eth-implicit Intents account = lower-case 0x address).
  */
-import { INTENTS_CONTRACT, type IntentMessage, type IntentsRequirement, type MultiPayload } from "@nearpay/spec";
+import { INTENTS_CONTRACT, type IntentMessage, type IntentsRequirement, type MultiPayload } from "@nearpay-money/spec";
 import bs58 from "bs58";
 
 /** Salt the test-mode (sandbox) Verifier uses; never a mainnet salt, so test payloads cannot execute on mainnet. */

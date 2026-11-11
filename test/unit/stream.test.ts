@@ -1,4 +1,4 @@
-import { getPublicCheckoutSession, PublicCheckoutSession, submitDepositTx } from "@nearpay/spec";
+import { getPublicCheckoutSession, PublicCheckoutSession, submitDepositTx } from "@nearpay-money/spec";
 import { describe, expect, it, vi } from "vitest";
 import { SseParser } from "../../src/features/status-stream/sse";
 import { decodeStreamEvent, openStatusStream, type StreamMessage } from "../../src/features/status-stream/stream";

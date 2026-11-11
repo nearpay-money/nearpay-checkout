@@ -1,6 +1,6 @@
 /**
  * Mock NearPay for the checkout's Playwright tests: serves `dist-e2e/` (SPA fallback) and the public
- * payer routes + sentinel co-signing under `/api`, driven by the `@nearpay/spec` route tables. Every
+ * payer routes + sentinel co-signing under `/api`, driven by the `@nearpay-money/spec` route tables. Every
  * request body is validated with the route's request schema and every response/event with its response
  * schema, so the tests double as contract tests of the checkout's API usage. Attestations are signed with
  * the spec's test-vector sentinel key (pinned by the e2e build).
@@ -33,7 +33,7 @@ import {
   streamCheckoutSession,
   submitDepositTx,
   submitSignedIntent,
-} from "@nearpay/spec";
+} from "@nearpay-money/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
 import type {

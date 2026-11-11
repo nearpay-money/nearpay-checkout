@@ -15,8 +15,8 @@
  * instructions themselves), never the payments copy. Any failure → no address, no wallet prompt.
  */
 
-import type { Attestation, PayerAttempt } from "@nearpay/spec";
-import { SignedAttestation } from "@nearpay/spec";
+import type { Attestation, PayerAttempt } from "@nearpay-money/spec";
+import { SignedAttestation } from "@nearpay-money/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import canonicalize from "canonicalize";
 import type { z } from "zod";

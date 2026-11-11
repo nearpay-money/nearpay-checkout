@@ -1,5 +1,5 @@
 /** `PublicInvoice` fixtures (spec 0.4.0) shared by unit tests and the Playwright mock. */
-import { PublicInvoice, safeParseTolerant } from "@nearpay/spec";
+import { PublicInvoice, safeParseTolerant } from "@nearpay-money/spec";
 import type { z } from "zod";
 
 /** spec 0.4.0 `PublicInvoice` (with `auto_debit`). */

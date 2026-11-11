@@ -7,7 +7,7 @@
  * the verified attestation, §5.4), so an unreadable or wrong balance can only change what is listed.
  */
 
-import { parseOmftAssetId } from "@nearpay/spec";
+import { parseOmftAssetId } from "@nearpay-money/spec";
 import type { Option } from "../../app/machine";
 import { formatBaseUnits, formatSignificant } from "../../lib/money/format";
 import { isSolanaWalletOption, optionKey, optionWalletAsset } from "./options";

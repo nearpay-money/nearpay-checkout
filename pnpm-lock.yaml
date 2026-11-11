@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  "@nearpay/spec": 0.4.1
+  "@nearpay-money/spec": 0.5.0
 
 importers:
   .:
@@ -16,9 +16,9 @@ importers:
       "@nearpay-internal/ui":
         specifier: 0.5.0
         version: 0.5.0(react@19.1.10)
-      "@nearpay/spec":
-        specifier: 0.4.1
-        version: 0.4.1(zod@4.6.7)
+      "@nearpay-money/spec":
+        specifier: 0.5.0
+        version: 0.5.0(zod@4.6.7)
       "@noble/curves":
         specifier: 2.4.0
         version: 2.4.0
@@ -388,9 +388,9 @@ packages:
     peerDependencies:
       react: ^19.0.0
 
-  "@nearpay/spec@0.4.1":
+  "@nearpay-money/spec@0.5.0":
     resolution:
-      { integrity: sha512-ZxLWGwUN8bU/5OduCRgRufuRtBdrsOFPuoS8xxUGkbnHBjI5ExjoIy1zBoNQDhk0VDgjOfXnnHKc0WYq5iG7cg== }
+      { integrity: sha512-hvuwO+DjlZu4PIxQTjYWkZuTeg8pVPEMLTFDHqz7P9h2z/L7U6YNh+O9pI6j/90hnZotkAbVMUb9Rje5YDldQw== }
     engines: { node: ">=22.11.0" }
     peerDependencies:
       zod: ^4.6.7
@@ -1314,7 +1314,7 @@ snapshots:
       "@fontsource-variable/instrument-sans": 5.3.0
       react: 19.1.10
 
-  "@nearpay/spec@0.4.1(zod@4.6.7)":
+  "@nearpay-money/spec@0.5.0(zod@4.6.7)":
     dependencies:
       zod: 4.6.7
 

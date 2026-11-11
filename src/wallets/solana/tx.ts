@@ -11,8 +11,8 @@
  * The message is a legacy message (no lookup tables) with the connected wallet as fee payer, serialised
  * here without a Solana SDK; the wallet signs and sends it (`solana:signAndSendTransaction`).
  */
-import type { Attestation } from "@nearpay/spec";
-import { parseOmftAssetId, SOLANA_MAINNET } from "@nearpay/spec";
+import type { Attestation } from "@nearpay-money/spec";
+import { parseOmftAssetId, SOLANA_MAINNET } from "@nearpay-money/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";

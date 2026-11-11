@@ -7,9 +7,9 @@
  * only from the sentinel attestation once a payment attempt is verified, exactly as in checkout.
  */
 
-import type { PublicInvoice } from "@nearpay/spec";
-import { InvoiceSecret } from "@nearpay/spec";
 import type { MoneyFormatOptions, Tone } from "@nearpay-internal/ui";
+import type { PublicInvoice } from "@nearpay-money/spec";
+import { InvoiceSecret } from "@nearpay-money/spec";
 import type { z } from "zod";
 import type { MessageKey } from "../../lib/i18n/messages.en";
 import { priceMoney, pricingAssetMeta } from "../../lib/money/display";

@@ -57,10 +57,10 @@ export function parseSentinelKeys(json: string, source: string): PinnedKey[] {
   });
 }
 
-/** The spec's shared test-vector key (`@nearpay/spec/test-vectors/sentinel-attestation.json`). */
+/** The spec's shared test-vector key (`@nearpay-money/spec/test-vectors/sentinel-attestation.json`). */
 export function testVectorKey(root: string): PinnedKey {
   const require = createRequire(join(root, "package.json"));
-  const file = require.resolve("@nearpay/spec/test-vectors/sentinel-attestation.json");
+  const file = require.resolve("@nearpay-money/spec/test-vectors/sentinel-attestation.json");
   const v = JSON.parse(readFileSync(file, "utf8")) as { key: { kid: string; public_key_base64url: string } };
   return { kid: v.key.kid, public_key: v.key.public_key_base64url };
 }

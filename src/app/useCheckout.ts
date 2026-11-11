@@ -14,7 +14,7 @@ import {
   simulateDeposit,
   submitDepositTx,
   submitSignedIntent,
-} from "@nearpay/spec";
+} from "@nearpay-money/spec";
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { config } from "../config";
 import { optionKey, payableOptions } from "../features/asset-picker/options";

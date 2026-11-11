@@ -4,8 +4,8 @@
  * BIP-21 QR, and the unchanged rules (sentinel before any prompt, test mode never broadcasts).
  */
 
-import { SOLANA_MAINNET } from "@nearpay/spec";
-import v from "@nearpay/spec/test-vectors/solana-transfer.json" with { type: "json" };
+import { SOLANA_MAINNET } from "@nearpay-money/spec";
+import v from "@nearpay-money/spec/test-vectors/solana-transfer.json" with { type: "json" };
 import bs58 from "bs58";
 import { solanaPaymentTransaction } from "../../src/wallets/solana/tx";
 import { expect, test } from "./support/fixtures";

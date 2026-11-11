@@ -10,7 +10,7 @@ import {
   PayerAttempt,
   PublicCheckoutSession,
   streamCheckoutSession,
-} from "@nearpay/spec";
+} from "@nearpay-money/spec";
 import type { z } from "zod";
 import { call, type Fetch, parseTolerant, routeUrl } from "../../lib/api/client";
 import { SseParser } from "./sse";

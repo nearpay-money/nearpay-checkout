@@ -14,12 +14,7 @@
  * - The invoice's `merchant_name_unverified` is never rendered (L-CK-03): the attested merchant appears
  *   once a payment attempt is verified, as in every checkout.
  */
-import {
-  createPublicInvoiceSession,
-  getPublicInvoice,
-  getPublicInvoicePdf,
-  type InvoicePaymentSession,
-} from "@nearpay/spec";
+
 import {
   Button,
   Callout,
@@ -32,6 +27,12 @@ import {
   StatusBadge,
   WarningIcon,
 } from "@nearpay-internal/ui";
+import {
+  createPublicInvoiceSession,
+  getPublicInvoice,
+  getPublicInvoicePdf,
+  type InvoicePaymentSession,
+} from "@nearpay-money/spec";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import type { z } from "zod";
 import { CheckoutView } from "../../app/CheckoutView";
