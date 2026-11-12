@@ -139,7 +139,7 @@ test("payment link: inactive, not found, and link_inactive on open", async ({ pa
   await expect(page.getByTestId("error")).toContainText("can't accept live payments yet");
 });
 
-test("dark theme and desktop two-column review", async ({ page, mock }) => {
+test("system dark mode keeps the light design by default; desktop two-column review", async ({ page, mock }) => {
   await page.emulateMedia({ colorScheme: "dark" });
   await page.setViewportSize({ width: 1440, height: 900 });
   await injectEvmWallet(page, { chainId: "0x2105" });
@@ -155,18 +155,21 @@ test("dark theme and desktop two-column review", async ({ page, mock }) => {
   await expect(page.getByTestId("total-to-send")).toHaveText("2.005013 USDC");
   await expect(page.getByTestId("fee-card")).not.toContainText("You send");
   await expect(page.getByTestId("order-header")).toHaveCount(0);
-  // The theme background covers the whole viewport: desktop canvas (#0b1a2c) on html and body…
-  const bgs = () =>
+  // Light by default even when the payer's system is dark (owner, 2026-11-13): no dark canvas, light colour scheme.
+  const look = () =>
     page.evaluate(() => ({
+      scheme: getComputedStyle(document.documentElement).colorScheme,
       html: getComputedStyle(document.documentElement).backgroundColor,
-      body: getComputedStyle(document.body).backgroundColor,
-      bottom: document.elementFromPoint(5, window.innerHeight - 2)?.closest("html") !== null,
       covers: document.documentElement.getBoundingClientRect().height >= window.innerHeight,
     }));
-  expect(await bgs()).toEqual({ html: "rgb(11, 26, 44)", body: "rgb(11, 26, 44)", bottom: true, covers: true });
-  // …and the dark surface (#12263f) on phones.
+  const desk = await look();
+  expect(desk.scheme).toBe("light");
+  expect(desk.html).not.toBe("rgb(11, 26, 44)");
+  expect(desk.covers).toBe(true);
   await page.setViewportSize({ width: 390, height: 1400 });
-  expect(await bgs()).toMatchObject({ html: "rgb(18, 38, 63)", body: "rgb(18, 38, 63)", covers: true });
+  const phone = await look();
+  expect(phone.scheme).toBe("light");
+  expect(phone.html).not.toBe("rgb(18, 38, 63)");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByTestId("use-manual").click();
   await expect(page.getByTestId("asset-picker")).toBeVisible();
