@@ -48,9 +48,11 @@ export function StartScreen({
 }
 
 function WalletAvatar({ icon, name }: { icon: string | null; name: string }) {
-  // Only `data:` icons are shown (CSP img-src 'self' data:); others fall back to the initial.
-  return icon ? (
-    <img className="ck-wallet-icon" src={icon} alt="" width={32} height={32} />
+  // Only `data:` icons are shown (CSP img-src 'self' data:); others — and icons that fail to decode —
+  // fall back to the initial.
+  const [broken, setBroken] = useState(false);
+  return icon && !broken ? (
+    <img className="ck-wallet-icon" src={icon} alt="" width={32} height={32} onError={() => setBroken(true)} />
   ) : (
     <Avatar initial={name} size="sm" />
   );

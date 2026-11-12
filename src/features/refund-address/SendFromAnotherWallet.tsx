@@ -9,6 +9,7 @@ import type { Option } from "../../app/machine";
 import { chainName } from "../../lib/chains/chains";
 import { t } from "../../lib/i18n/t";
 import { ScreenTitle } from "../../ui/blocks";
+import { CryptoIcon } from "../../ui/CryptoIcon";
 import { optionTitle } from "../asset-picker/options";
 import { validateRefundAddress } from "./validate";
 
@@ -40,7 +41,7 @@ export function SendFromAnotherWallet({
     <section className="ck-screen" data-testid="refund-form" aria-labelledby="ck-manual-title">
       <ScreenTitle id="ck-manual-title" title={t("manual.title")} />
       <SelectionCard
-        avatar={option.symbol}
+        avatar={<CryptoIcon kind="token" id={option.symbol} />}
         title={optionTitle(option)}
         action={
           <button type="button" className="np-link-button" onClick={onChange} data-testid="change-option">

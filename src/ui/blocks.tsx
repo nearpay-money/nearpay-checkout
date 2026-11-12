@@ -64,6 +64,8 @@ export function OptionButton({
 
 export interface StateScreenProps {
   icon?: ReactNode;
+  /** Colour of the icon disc (default `info`, the accent): success, progress, warning, danger, neutral. */
+  iconTone?: Tone;
   title: ReactNode;
   body?: ReactNode;
   badge?: string;
@@ -81,12 +83,12 @@ export interface StateScreenProps {
 }
 
 /**
- * The status frame of the Figma (divider, icon, title, lede, badge, callout with reference, actions) on
- * the kit's `StateScreen` (ui 0.3.0); adds the divider under the amount hero and content between the
- * callout and the actions (kit gap: no slot there).
+ * The status frame (icon in a tinted disc, title, lede, badge, callout with reference, actions) on the
+ * kit's `StateScreen`; adds content between the callout and the actions (kit gap: no slot there).
  */
 export function StateScreen({
   icon,
+  iconTone = "info",
   title,
   body,
   badge,
@@ -102,9 +104,9 @@ export function StateScreen({
   const titleId = testId ? `${testId}-title` : undefined;
   return (
     <section className="ck-screen" data-testid={testId} aria-labelledby={titleId}>
-      {icon ? <hr className="np-divider" /> : null}
       <KitStateScreen
         icon={icon}
+        tone={iconTone}
         title={<span id={titleId}>{title}</span>}
         badge={badge ? <StatusBadge {...(badgeTone ? { tone: badgeTone } : {})}>{badge}</StatusBadge> : undefined}
         callout={

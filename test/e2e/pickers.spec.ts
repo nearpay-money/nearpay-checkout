@@ -132,14 +132,14 @@ test("EVM wallet: only tokens it holds, with balances, by value; Not enough; Sho
   const rows = page.getByTestId("token-picker-list").getByRole("option");
   // USDT (0) is hidden; USDC (6× the payment) before ETH (1.7×); DAI doesn't cover it.
   await expect(rows).toHaveCount(3);
-  await expect(rows.nth(0)).toContainText("USDC · 12.34");
-  await expect(rows.nth(1)).toContainText("ETH · 0.001");
-  await expect(rows.nth(2)).toContainText("DAI · 1.50");
+  await expect(rows.nth(0)).toHaveText("USDC, Balance 12.34");
+  await expect(rows.nth(1)).toHaveText("ETH, Balance 0.001");
+  await expect(rows.nth(2)).toHaveText(/^DAI\s*Not enough, Balance 1\.50$/);
   await expect(rows.nth(2)).toContainText("Not enough");
   await expect(rows.nth(2)).toHaveAttribute("aria-disabled", "true");
   await page.getByTestId("show-all-tokens").click();
   await expect(rows).toHaveCount(4);
-  await expect(page.getByTestId(`option-route_quote-${omft(USDT)}`)).toContainText("USDT · 0.00");
+  await expect(page.getByTestId(`option-route_quote-${omft(USDT)}`)).toContainText(", Balance 0.00");
   await page.getByTestId("show-all-tokens").click();
   await expect(rows).toHaveCount(3);
   await page.keyboard.press("Escape");
@@ -163,10 +163,11 @@ test("live-beta regression: MetaMask on Base lists USDC and ETH from the wallet;
   await page.getByTestId("token-picker-trigger").click();
   const rows = page.getByTestId("token-picker-list").getByRole("option");
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText("ETH · 0.00156285");
-  await expect(rows.nth(0)).toContainText("≈ 0.000481721 ETH · includes fees");
-  await expect(rows.nth(1)).toContainText("USDC · 4.52101");
-  await expect(rows.nth(1)).toContainText("≈ 1.52 USDC");
+  // Logo, symbol and balance only: the indicative amount is on the order side, not in the rows.
+  await expect(rows.nth(0)).toHaveText("ETH, Balance 0.00156285");
+  await expect(rows.nth(1)).toHaveText("USDC, Balance 4.52101");
+  await expect(rows.nth(0).locator("img")).toHaveAttribute("src", "/crypto/token-eth.svg");
+  await expect(page.getByTestId("selected-estimate")).toHaveText("about 0.000481721 ETH");
   await expect(page.getByTestId(`option-intents_transfer-${ETH_BASE}`)).toHaveCount(0);
   await page.keyboard.press("Escape");
   expect(nearRpc).not.toContain("mt_balance_of"); // nothing read from Intents for the Base list
@@ -179,8 +180,9 @@ test("live-beta regression: MetaMask on Base lists USDC and ETH from the wallet;
   await nets.nth(1).click();
   await page.getByTestId("token-picker-trigger").click();
   const intents = page.getByTestId(`option-intents_transfer-${ETH_BASE}`);
-  await expect(intents).toContainText("ETH · < 0.000001");
-  await expect(intents).toContainText("From your NEAR Intents balance · Not enough · 0.000481721 ETH needed");
+  await expect(intents).toHaveText(/^ETH\s*Not enough, Balance < 0\.000001$/);
+  await expect(intents).toContainText("Not enough");
+  await expect(intents).not.toContainText("needed");
   await expect(intents).toHaveAttribute("aria-disabled", "true");
   await page.keyboard.press("Escape");
   expect(nearRpc).toContain("mt_balance_of");
@@ -197,9 +199,9 @@ test("a token whose balance read fails is listed as 'Balance unavailable' and st
   await page.getByTestId("token-picker-trigger").click();
   const rows = page.getByTestId("token-picker-list").getByRole("option");
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(0)).toContainText("ETH · 0.00156285");
+  await expect(rows.nth(0)).toContainText("ETH, Balance 0.00156285");
   const usdc = page.getByTestId(`option-route_quote-${omft(USDC)}`);
-  await expect(usdc).toContainText("USDC · Balance unavailable");
+  await expect(usdc).toHaveText(/^USDC\s*Balance unavailable$/);
   await expect(usdc).not.toHaveAttribute("aria-disabled", "true");
   await usdc.click();
   await expect(page.getByTestId("token-picker-trigger")).toContainText("Balance unavailable");
@@ -300,4 +302,75 @@ test("NEAR wallet without NEAR for gas: warning, nothing signed", async ({ page,
   await expect(page.getByTestId("gas-warning")).toContainText("NEAR on NEAR");
   const signed = await page.evaluate(() => (window as unknown as { __nearCalls: unknown[] }).__nearCalls.length);
   expect(signed).toBe(0);
+});
+
+test("networks: one row per chain with its logo, no token lists; tokens: logo + symbol", async ({ page, mock }) => {
+  const s = mock.create({}, { options: MANY });
+  await page.goto(mock.url(s));
+  await page.getByTestId("path-manual").click();
+  await expect(page.getByTestId("network-picker-trigger").locator("img")).toHaveAttribute(
+    "src",
+    "/crypto/chain-base.svg",
+  );
+  await page.getByTestId("network-picker-trigger").click();
+  const nets = page.getByTestId("network-picker-list").getByRole("option");
+  const names = await nets.allTextContents();
+  expect(new Set(names).size).toBe(names.length);
+  expect(names.join(" ")).not.toMatch(/USDC|USDT|DAI|COIN/);
+  await expect(page.getByTestId("network-eip155:42161").locator("img")).toHaveAttribute(
+    "src",
+    "/crypto/chain-arbitrum.svg",
+  );
+  // Every listed logo is a self-hosted file that loads.
+  await expect
+    .poll(() =>
+      page.$$eval(
+        "img.ck-coin",
+        (imgs) =>
+          imgs.filter((i) => !(i as HTMLImageElement).complete || (i as HTMLImageElement).naturalWidth === 0).length,
+      ),
+    )
+    .toBe(0);
+  await page.keyboard.press("Escape");
+  await page.getByTestId("token-picker-trigger").click();
+  await expect(page.getByTestId(`option-route_quote-${USDC_BASE}`).locator("img")).toHaveAttribute(
+    "src",
+    "/crypto/token-usdc.svg",
+  );
+  // A token without a logo in the set keeps the letter avatar.
+  await page.keyboard.press("Escape");
+  await chooseNetwork(page, "eip155:1");
+  await page.getByTestId("token-picker-trigger").click();
+  await expect(page.getByTestId("option-route_quote-nep141:eth.omft.near").locator(".ck-coin--letter")).toHaveText("C");
+});
+
+test("every option unavailable: one message instead of a reason on every row; one unavailable token keeps its reason", async ({
+  page,
+  mock,
+}) => {
+  const off = BASE_OPTIONS.map((o) => ({ ...o, available: false, reason: "route_unavailable" }));
+  const s = mock.create({}, { options: off });
+  await page.goto(mock.url(s));
+  await page.getByTestId("path-manual").click();
+  await expect(page.getByTestId("all-unavailable")).toHaveText(
+    "Payments to this merchant are paused right now. Please try again shortly.",
+  );
+  await expect(page.getByTestId("network-picker")).toHaveCount(0);
+  await expect(page.getByTestId("asset-continue")).toHaveCount(0);
+  await expect(page.getByText("Unavailable right now")).toHaveCount(0);
+
+  const slow = mock.create({}, { options: off.map((o) => ({ ...o, reason: "route_too_slow" })) });
+  await page.goto(mock.url(slow));
+  await page.getByTestId("path-manual").click();
+  await expect(page.getByTestId("all-unavailable")).toContainText("There isn't enough time left");
+
+  const one = mock.create(
+    {},
+    { options: [BASE_OPTIONS[0], { ...BASE_OPTIONS[1], available: false, reason: "route_unavailable" }] },
+  );
+  await page.goto(mock.url(one));
+  await page.getByTestId("path-manual").click();
+  await expect(page.getByTestId("all-unavailable")).toHaveCount(0);
+  await page.getByTestId("token-picker-trigger").click();
+  await expect(page.getByTestId(`option-route_quote-${omft(USDT)}`)).toContainText("Unavailable right now");
 });

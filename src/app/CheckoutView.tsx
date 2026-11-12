@@ -4,14 +4,17 @@
  * frame (merchant, amount hero, order summary, test-mode banner, back) and the per-screen UI state
  * (search, refund address, Turnstile token, the "still confirming" timer).
  *
- * Design v2: from 960 px the hosted page is the split layout — the navy order side (attested merchant,
- * item, amount, line items with "You send", "How your payment travels") and the white pay side; below
- * it one column with the order summary collapsed into a header + "Order details" (`OrderHeader`).
+ * Landing-page look (2026-11-12, nearpay-site showcase checkout card): from 960 px the hosted page is one
+ * two-tone card on the canvas — the navy order side (attested merchant, item, amount, line items with
+ * "You send" — on "Pay with" the chosen token's indicative amount —, "How your payment travels") and the
+ * light pay side; below it one column with the order summary collapsed into a navy header + "Order
+ * details" (`OrderHeader`).
  */
 import { Callout, CheckoutFrame, type KeyValueItem, Money, Skeleton } from "@nearpay-internal/ui";
 import { lazy, type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { webLinks } from "../config";
 import { optionKey, optionNetwork } from "../features/asset-picker/options";
+import { estimateText } from "../features/asset-picker/tokens";
 import { ManualInstructions } from "../features/deposit-instructions/ManualInstructions";
 import { VerifiedMerchant } from "../features/deposit-instructions/PaymentDetails";
 import { WalletPay } from "../features/deposit-instructions/WalletPay";
@@ -21,6 +24,7 @@ import { StartScreen, WalletConnect } from "../features/wallet-connect/WalletCon
 import { errorText, t } from "../lib/i18n/t";
 import { assetMoney } from "../lib/money/display";
 import { useMediaQuery } from "../ui/useMediaQuery";
+import type { Option } from "./machine";
 import { buildModel, instructionsNetwork, moneyText, type ViewModel } from "./model";
 import { AmountWithLabel, OrderHeader, OrderLines, PaymentRoute, routeFrom, WIDE_QUERY } from "./OrderSummary";
 import {
@@ -124,6 +128,8 @@ export function CheckoutView({
     (b: ReadonlyMap<string, string>) => setBalances((prev) => new Map([...prev, ...b])),
     [],
   );
+  /** The option chosen in the "Pay with" dropdowns (before Continue), shown on the order side. */
+  const [choice, setChoice] = useState<Option | null>(null);
 
   // The network-fee pre-check runs while `busy` but before any wallet prompt: stay on the review.
   const screen = screenFor(state, {
@@ -239,6 +245,9 @@ export function CheckoutView({
               walletReads={c.walletReads}
               preferKey={preferKey}
               onBalances={onBalances}
+              onChoice={setChoice}
+              merchantReceives={vm.price ? <Money {...vm.price} /> : vm.priceText}
+              wide={wide}
               onPick={(o) => {
                 setPreferKey(null);
                 actions.selectOption(o);
@@ -338,17 +347,21 @@ export function CheckoutView({
   const loaded = state.session !== null;
   const priceNode = vm.price ? <Money {...vm.price} size="hero" /> : vm.priceText;
   const showError = state.error && !(state.phase === "pay_wallet" && SCREEN_ERRORS.has(state.error.code));
-  // Route: the attested token and network once verified, else the option being chosen.
+  // Route: the attested token and network once verified, else the option picked, else the one being chosen.
+  const chosen = option ?? (screen === "pay_with" ? choice : null);
+  const routeToken = state.verified ? (vm.asset?.symbol ?? option?.symbol ?? null) : (chosen?.symbol ?? null);
   const from = state.verified
-    ? routeFrom(vm.asset?.symbol ?? option?.symbol, instructionsNetwork(c))
-    : option
-      ? routeFrom(option.symbol, optionNetwork(option))
+    ? routeFrom(routeToken, instructionsNetwork(c))
+    : chosen
+      ? routeFrom(chosen.symbol, optionNetwork(chosen))
       : null;
+  // Before the instructions are attested, "You send" is the chosen option's indicative amount.
+  const estimate = screen === "pay_with" && choice ? estimateText(choice) : null;
   const order: OrderParts | null = loaded
     ? {
         // "Review your updated total" carries the total itself.
-        lines: orderLines(vm, wide && screen !== "review_updated", summaryHead),
-        route: <PaymentRoute from={from} merchant={merchant?.name ?? null} />,
+        lines: orderLines(vm, wide && screen !== "review_updated", summaryHead, estimate),
+        route: <PaymentRoute from={from} token={routeToken} merchant={merchant?.name ?? null} />,
       }
     : null;
   const navy = mode === "hosted";
@@ -418,11 +431,12 @@ interface OrderParts {
 
 /**
  * Line items: the item (description, else "Purchase") at the price, then — once the instructions are
- * attested — Payment fees and "You send" (the attested total); before that the Total is the price.
+ * attested — Payment fees and "You send" (the attested total); on "Pay with", with a token chosen, Payment
+ * fees "Included" and "You send about <indicative amount>"; otherwise the Total is the price.
  * Hosted invoices replace the item row with the compact invoice (`head`). With `totalId` (desktop) "You
  * send" carries the `total-to-send` value (phones show it on the review card instead).
  */
-function orderLines(vm: ViewModel, totalId: boolean, head?: ReactNode): ReactNode {
+function orderLines(vm: ViewModel, totalId: boolean, head?: ReactNode, estimate: string | null = null): ReactNode {
   const price = vm.price ? <Money {...vm.price} /> : vm.priceText;
   const total = vm.total ? assetMoney(vm.total, vm.asset) : null;
   const items: KeyValueItem[] = head ? [] : [{ label: vm.description ?? t("summary.purchase"), value: price }];
@@ -442,6 +456,15 @@ function orderLines(vm: ViewModel, totalId: boolean, head?: ReactNode): ReactNod
     items.push({
       label: t("summary.youSend"),
       value: totalId ? <span data-testid="total-to-send">{sent}</span> : sent,
+      total: true,
+    });
+  } else if (estimate) {
+    // "Pay with": the indicative amount of the chosen token (fees included), never presented as exact.
+    items.push({ label: t("summary.fees"), value: t("summary.feesIncluded") });
+    const about = t("asset.youSendAbout", { amount: estimate });
+    items.push({
+      label: t("summary.youSend"),
+      value: totalId ? <span data-testid="selected-estimate">{about}</span> : about,
       total: true,
     });
   } else if (!head) {

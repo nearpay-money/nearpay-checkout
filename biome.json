@@ -14,7 +14,8 @@
       "!test-results",
       "!playwright-report",
       "!**/*.md",
-      "!public/favicon.svg"
+      "!public/favicon.svg",
+      "!public/crypto"
     ]
   },
   "formatter": {
