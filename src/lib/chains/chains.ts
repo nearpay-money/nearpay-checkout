@@ -3,6 +3,8 @@
  * mirrors the kit chain registry (lld/00-foundations.md §4) for display, address validation and the
  * wallet path. Unknown chains still work on the manual path (generic name, no validation shortcuts).
  */
+import { parseAssetId } from "@nearpay-money/spec";
+
 export type ChainFamily = "evm" | "near" | "solana" | "bitcoin";
 
 export interface ChainInfo {
@@ -15,11 +17,21 @@ export interface ChainInfo {
   /** `wallet_addEthereumChain` parameters (public RPC + explorer) for wallets that lack the chain. */
   readonly evmAdd?: { readonly rpcUrls: readonly string[]; readonly blockExplorerUrls: readonly string[] };
   readonly btc?: { readonly hrp: string; readonly p2pkh: number; readonly p2sh: number };
-  /** omft bridge prefix (`nep141:<prefix>-0x….omft.near` tokens, `nep141:<prefix>.omft.near` native). */
-  readonly omft?: string;
+  /**
+   * 1Click `blockchain` code: bridge asset ids of this chain (`nep141:<prefix>[-0x…].omft.near` / `.omdep.near`, prefix
+   * aliases such as `bnb` resolved by spec `parseAssetId`) derive a wallet recipe.
+   */
+  readonly blockchain?: string;
 }
 
-const evm = (id: number, name: string, native: string, rpc: string, explorer: string, omft?: string): ChainInfo => ({
+const evm = (
+  id: number,
+  name: string,
+  native: string,
+  rpc: string,
+  explorer: string,
+  blockchain: string,
+): ChainInfo => ({
   caip2: `eip155:${id}`,
   name,
   family: "evm",
@@ -27,7 +39,7 @@ const evm = (id: number, name: string, native: string, rpc: string, explorer: st
   nativeDecimals: 18,
   evmChainId: id,
   evmAdd: { rpcUrls: [rpc], blockExplorerUrls: [explorer] },
-  ...(omft ? { omft } : {}),
+  blockchain,
 });
 
 export const NEAR_MAINNET = "near:mainnet";
@@ -37,10 +49,10 @@ export const CHAINS: readonly ChainInfo[] = Object.freeze([
   evm(1, "Ethereum", "ETH", "https://ethereum-rpc.publicnode.com", "https://etherscan.io", "eth"),
   evm(8453, "Base", "ETH", "https://mainnet.base.org", "https://basescan.org", "base"),
   evm(42161, "Arbitrum One", "ETH", "https://arb1.arbitrum.io/rpc", "https://arbiscan.io", "arb"),
-  evm(10, "OP Mainnet", "ETH", "https://mainnet.optimism.io", "https://optimistic.etherscan.io"),
-  evm(137, "Polygon", "POL", "https://polygon-rpc.com", "https://polygonscan.com"),
-  evm(56, "BNB Smart Chain", "BNB", "https://bsc-dataseed.binance.org", "https://bscscan.com"),
-  evm(43114, "Avalanche C-Chain", "AVAX", "https://api.avax.network/ext/bc/C/rpc", "https://snowtrace.io"),
+  evm(10, "OP Mainnet", "ETH", "https://mainnet.optimism.io", "https://optimistic.etherscan.io", "op"),
+  evm(137, "Polygon", "POL", "https://polygon-rpc.com", "https://polygonscan.com", "pol"),
+  evm(56, "BNB Smart Chain", "BNB", "https://bsc-dataseed.binance.org", "https://bscscan.com", "bsc"),
+  evm(43114, "Avalanche C-Chain", "AVAX", "https://api.avax.network/ext/bc/C/rpc", "https://snowtrace.io", "avax"),
   evm(100, "Gnosis", "XDAI", "https://rpc.gnosischain.com", "https://gnosisscan.io", "gnosis"),
   {
     caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
@@ -97,7 +109,6 @@ export type WalletAsset =
   | { readonly kind: "near_nep141"; readonly token: string }
   | { readonly kind: "near_wrap"; readonly token: "wrap.near" };
 
-const OMFT_RE = /^nep141:([a-z0-9]+)(?:-(0x[0-9a-f]{40}))?\.omft\.near$/;
 const NEP141_RE = /^nep141:((?:(?:[a-z\d]+[-_])*[a-z\d]+\.)*(?:[a-z\d]+[-_])*[a-z\d]+)$/;
 const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const NEAR_ACCOUNT_RE = /^(?:(?:[a-z\d]+[-_])*[a-z\d]+\.)*(?:[a-z\d]+[-_])*[a-z\d]+$/;
@@ -111,18 +122,23 @@ export interface TokenHint {
   readonly address: string | null;
 }
 
-/** Derivation from the asset id alone (omft-bridged EVM assets, NEP-141 accounts). */
+/**
+ * Derivation from the asset id alone (spec `parseAssetId`, 0.5.2): bridged EVM assets with either suffix (`omft`,
+ * `omdep`) whose prefix names `chain`, and NEAR NEP-141 accounts. Bridge ids and bridged-looking accounts are never
+ * read as NEAR tokens.
+ */
 function derivedWalletAsset(assetId: string, info: ChainInfo): WalletAsset | null {
+  const a = parseAssetId(assetId);
   if (info.family === "evm") {
-    const m = OMFT_RE.exec(assetId);
-    if (!m || !info.omft || m[1] !== info.omft || info.evmChainId === undefined) return null;
-    return m[2]
-      ? { kind: "evm_erc20", chainId: info.evmChainId, token: m[2] }
-      : { kind: "evm_native", chainId: info.evmChainId };
+    if (a.scheme !== "omft" && a.scheme !== "omdep") return null;
+    if (!info.blockchain || a.blockchain !== info.blockchain || info.evmChainId === undefined) return null;
+    if (a.kind === "evm") return { kind: "evm_erc20", chainId: info.evmChainId, token: a.token as string };
+    if (a.kind === "native") return { kind: "evm_native", chainId: info.evmChainId };
+    return null;
   }
   if (info.family === "near") {
     const m = NEP141_RE.exec(assetId);
-    if (!m || assetId.endsWith(".omft.near")) return null;
+    if (!m || a.scheme !== "nep141") return null;
     const token = m[1] as string;
     if (token.length < 2 || token.length > 64) return null;
     return token === "wrap.near" ? { kind: "near_wrap", token } : { kind: "near_nep141", token };
@@ -156,7 +172,7 @@ const sameAsset = (a: WalletAsset, b: WalletAsset): boolean =>
  * How the wallet path pays an origin asset on `chain`.
  *
  * - The asset id is attested (sentinel signs `origin_asset_id`), so a recipe derived from it wins:
- *   omft-bridged EVM assets (`<prefix>-0x<contract>.omft.near`, prefix of `chain`) and NEP-141 token
+ *   bridged EVM assets (`<prefix>-0x<contract>.omft.near` or `.omdep.near`, prefix of `chain`) and NEP-141 token
  *   accounts (`wrap.near` is paid from native NEAR).
  * - Otherwise the typed `token` of the payment option (CR-15-06) is used: `erc20` / `native` on EVM
  *   chains, `nep141` on NEAR. `spl`, `other` and unknown standards stay manual-path only.

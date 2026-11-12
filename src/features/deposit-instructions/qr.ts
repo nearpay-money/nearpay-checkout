@@ -4,9 +4,9 @@
  * requests and BIP-21 URIs (Stage 4), the plain address otherwise. Built only from attested instructions.
  */
 import type { Attestation } from "@nearpay-money/spec";
-import { BITCOIN_MAINNET, bip21Uri, parseOmftAssetId, SOLANA_MAINNET, solanaPayUri } from "@nearpay-money/spec";
+import { BITCOIN_MAINNET, bip21Uri, SOLANA_MAINNET, solanaPayUri } from "@nearpay-money/spec";
 import type { WalletAsset } from "../../lib/chains/chains";
-import { isSolanaAddress, SOL_ASSET_ID, splAssetToken } from "../../wallets/solana/tx";
+import { isSolanaAddress, solanaAssetOf, splMintMatches } from "../../wallets/solana/tx";
 
 export const BTC_ASSET_ID = "nep141:btc.omft.near";
 
@@ -26,13 +26,11 @@ export function paymentUri(att: Pick<Attestation, "deposit" | "asset">): string 
     return bip21Uri(d.address, d.amount_in);
   }
   if (d.chain !== SOLANA_MAINNET || !a || !isSolanaAddress(d.address)) return null;
-  if (a.asset_id === SOL_ASSET_ID) {
+  if (solanaAssetOf(a.asset_id)?.kind === "native") {
     return a.token?.standard === "native" && a.decimals === 9 ? solanaPayUri(d.address, d.amount_in, 9, null) : null;
   }
   const mint = a.token?.standard === "spl" ? a.token.address : null;
-  const omft = parseOmftAssetId(a.asset_id);
-  if (!mint || !isSolanaAddress(mint) || omft?.kind !== "hash20" || omft.blockchain !== "sol") return null;
-  if (omft.token !== splAssetToken(mint)) return null;
+  if (!mint || !splMintMatches(a.asset_id, mint)) return null;
   return solanaPayUri(d.address, d.amount_in, a.decimals, mint);
 }
 

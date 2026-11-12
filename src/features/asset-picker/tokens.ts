@@ -7,9 +7,9 @@
  * the verified attestation, §5.4), so an unreadable or wrong balance can only change what is listed.
  */
 
-import { parseOmftAssetId } from "@nearpay-money/spec";
 import type { Option } from "../../app/machine";
 import { formatBaseUnits, formatSignificant } from "../../lib/money/format";
+import { solanaAssetOf } from "../../wallets/solana/tx";
 import { isSolanaWalletOption, optionKey, optionWalletAsset } from "./options";
 
 export type WalletFamily = "evm" | "near" | "solana";
@@ -33,7 +33,7 @@ export function balanceTarget(o: Option, family: WalletFamily): BalanceTarget | 
   }
   if (family === "solana") {
     if (!isSolanaWalletOption(o)) return null;
-    if (parseOmftAssetId(o.origin_asset_id)?.kind === "native") return { kind: "sol" };
+    if (solanaAssetOf(o.origin_asset_id)?.kind === "native") return { kind: "sol" };
     const mint = o.token?.standard === "spl" ? o.token.address : null;
     return mint && BASE58_32.test(mint) ? { kind: "spl", mint } : null;
   }
