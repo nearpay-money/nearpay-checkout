@@ -12,7 +12,7 @@
  * here without a Solana SDK; the wallet signs and sends it (`solana:signAndSendTransaction`).
  */
 import type { Attestation } from "@nearpay-money/spec";
-import { parseOmftAssetId, SOLANA_MAINNET } from "@nearpay-money/spec";
+import { parseAssetId, SOLANA_MAINNET } from "@nearpay-money/spec";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
@@ -98,6 +98,34 @@ export function associatedTokenAddress(owner: string, mint: string): { address: 
 export function splAssetToken(mint: string): string {
   const h = keccak_256(pubkeyBytes(mint)).slice(12);
   return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * What a Solana asset id names (spec `parseAssetId`, 0.5.2): native SOL (`nep141:sol.omft.near`, `sol.omdep.near`,
+ * `1cs_v1:sol:native:…`), an SPL token by hash20 (`sol-<hex>.omft.near`, `sol-0x<hex>.omdep.near`) or by mint
+ * (`1cs_v1:sol:spl:<mint>`); null for anything else.
+ */
+export function solanaAssetOf(
+  assetId: string,
+): { readonly kind: "native" } | { readonly kind: "spl"; readonly hash20?: string; readonly mint?: string } | null {
+  const a = parseAssetId(assetId);
+  if ((a.scheme === "omft" || a.scheme === "omdep") && a.blockchain === "sol") {
+    if (a.kind === "native") return { kind: "native" };
+    if (a.kind === "hash20") return { kind: "spl", hash20: a.token as string };
+    return null;
+  }
+  if (a.scheme === "1cs_v1" && a.blockchain === "sol") {
+    if (a.standard === "native") return { kind: "native" };
+    if (a.standard === "spl") return { kind: "spl", mint: a.address };
+  }
+  return null;
+}
+
+/** Whether `mint` is the SPL mint `assetId` names (hash20 reproduced, or the exact `1cs_v1` mint). */
+export function splMintMatches(assetId: string, mint: string): boolean {
+  const s = solanaAssetOf(assetId);
+  if (s?.kind !== "spl" || !isSolanaAddress(mint)) return false;
+  return s.mint !== undefined ? s.mint === mint : s.hash20 === splAssetToken(mint);
 }
 
 /** `nep141:sol-<hash20>.omft.near` for a mint (spec 0.4.0 SPL asset id rule). */
@@ -213,7 +241,7 @@ export function solanaRecipe(att: Pick<Attestation, "kind" | "deposit" | "asset"
   }
   const token = a.token;
   if (!token) return { ok: false, reason: "token" };
-  if (a.asset_id === SOL_ASSET_ID) {
+  if (solanaAssetOf(a.asset_id)?.kind === "native") {
     if (token.standard !== "native" || token.address !== null || a.decimals !== 9)
       return { ok: false, reason: "token" };
     return { ok: true, recipe: { kind: "sol", deposit: d.address, lamports: d.amount_in } };
@@ -221,10 +249,7 @@ export function solanaRecipe(att: Pick<Attestation, "kind" | "deposit" | "asset"
   if (token.standard !== "spl" || token.address === null || !isSolanaAddress(token.address)) {
     return { ok: false, reason: "token" };
   }
-  const omft = parseOmftAssetId(a.asset_id);
-  if (omft?.blockchain !== "sol" || omft.kind !== "hash20" || omft.token !== splAssetToken(token.address)) {
-    return { ok: false, reason: "mint_mismatch" };
-  }
+  if (!splMintMatches(a.asset_id, token.address)) return { ok: false, reason: "mint_mismatch" };
   return {
     ok: true,
     recipe: { kind: "spl", deposit: d.address, mint: token.address, decimals: a.decimals, amount: d.amount_in },
