@@ -1,6 +1,6 @@
 # AGENTS.md — nearpay-checkout
 
-You are working in **nearpay-checkout**, one of 27 NearPay repositories (`nearpay-brain/architecture/repositories.md`).
+You are working in **nearpay-checkout**, one of 26 NearPay repositories (`nearpay-brain/architecture/repositories.md`).
 Scope: Hosted checkout, payment links, hosted invoices and the embedded iframe app; wallet adapters; deposit instructions; live status.
 
 ## Before changing anything
