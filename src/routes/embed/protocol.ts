@@ -26,7 +26,9 @@ export interface InitMessage {
   readonly locale: string | null;
 }
 
-export const DEFAULT_APPEARANCE: Appearance = { theme: "auto", accent: null, radius: null };
+/** Light by default: the approved design is a dark order side and a light pay side (owner, 2026-11-13). A merchant
+ * can still ask for `dark` or `auto` (follow the payer's system) explicitly. */
+export const DEFAULT_APPEARANCE: Appearance = { theme: "light", accent: null, radius: null };
 
 const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
@@ -34,7 +36,7 @@ export function sanitizeAppearance(a: unknown): Appearance {
   if (typeof a !== "object" || a === null) return DEFAULT_APPEARANCE;
   const { theme, accent, radius } = a as Record<string, unknown>;
   return {
-    theme: theme === "light" || theme === "dark" ? theme : "auto",
+    theme: theme === "dark" || theme === "auto" ? theme : "light",
     accent: typeof accent === "string" && HEX_COLOR.test(accent) ? accent : null,
     radius:
       typeof radius === "number" && Number.isFinite(radius) && radius >= 0 && radius <= 24 ? Math.round(radius) : null,
