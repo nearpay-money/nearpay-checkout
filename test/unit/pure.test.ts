@@ -205,11 +205,12 @@ describe("embed protocol (§5.3, §6)", () => {
   });
   it("sanitises appearance", () => {
     expect(sanitizeAppearance({ theme: "neon", accent: "red; background:url(x)", radius: 99 })).toEqual({
-      theme: "auto",
+      theme: "light",
       accent: null,
       radius: null,
     });
-    expect(sanitizeAppearance(null)).toEqual({ theme: "auto", accent: null, radius: null });
+    expect(sanitizeAppearance(null)).toEqual({ theme: "light", accent: null, radius: null });
+    expect(sanitizeAppearance({ theme: "auto" }).theme).toBe("auto");
     expect(sanitizeAppearance({ theme: "light", accent: "#abc", radius: 3.6 })).toEqual({
       theme: "light",
       accent: "#abc",
