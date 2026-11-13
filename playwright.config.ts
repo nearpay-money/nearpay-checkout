@@ -9,6 +9,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 30_000,
+  // DIAG: temporary
   expect: { timeout: 7_000 },
   reporter: [["list"]],
   use: {
