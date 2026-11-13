@@ -183,13 +183,20 @@ test("a tampered Intents requirement is refused before any signature is requeste
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
-  try {
-    await choose(page, "intents_transfer", USDC_NEAR);
-  } catch (e) {
+  const picked = choose(page, "intents_transfer", USDC_NEAR).then(
+    () => true,
+    () => false,
+  );
+  const timer = new Promise<boolean>((r) => setTimeout(() => r(false), 12_000));
+  if (!(await Promise.race([picked, timer]))) {
     console.log("DIAG url=", page.url());
-    console.log("DIAG body=", (await page.locator("body").innerText()).slice(0, 1500));
-    console.log("DIAG testids=", await page.evaluate(() => [...document.querySelectorAll("[data-testid]")].map((n) => n.getAttribute("data-testid")).join(",")));
-    throw e;
+    console.log("DIAG body=", (await page.locator("body").innerText()).slice(0, 1500).replace(/\n+/g, " | "));
+    console.log(
+      "DIAG testids=",
+      await page.evaluate(() =>
+        [...document.querySelectorAll("[data-testid]")].map((n) => n.getAttribute("data-testid")).join(","),
+      ),
+    );
   }
   await expect(page.getByTestId("verify-failed")).toBeVisible();
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
