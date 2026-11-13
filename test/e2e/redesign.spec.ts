@@ -3,6 +3,7 @@ import type { Page } from "@playwright/test";
 import { USDC_BASE } from "../support/sessions";
 import { a11yBasics } from "./support/a11y";
 import { expect, test } from "./support/fixtures";
+import type { MockLink, MockNearPay, MockSession } from "./support/mock-server";
 import { choose } from "./support/pay";
 import { injectEvmWallet } from "./support/wallets";
 
@@ -121,6 +122,106 @@ test("payment link: shows the link, opens a session, continues in the normal flo
   await page.getByTestId("continue").click();
   await page.getByTestId("simulate").click();
   await expect(page.getByTestId("succeeded")).toBeVisible();
+});
+
+/** Pays a link's session on the manual path in test mode ("Simulate payment") up to "Payment complete". */
+async function payLink(page: Page, mock: MockNearPay, l: MockLink): Promise<MockSession> {
+  await page.goto(`${mock.origin}/l/${l.link.id}`);
+  await page.getByTestId("link-continue").click();
+  await page.getByTestId("path-manual").click();
+  await choose(page, "route_quote", USDC_BASE);
+  await page.getByTestId("refund-address").fill("0x52908400098527886E0F7030069857D2E4169EE7");
+  await page.getByTestId("continue").click();
+  await page.getByTestId("simulate").click();
+  await expect(page.getByTestId("succeeded")).toBeVisible();
+  const s = l.sessions[0];
+  if (!s) throw new Error("no session");
+  return s;
+}
+
+/** Screenshots for visual review, only with NP_SHOTS=<dir>. */
+async function shot(page: Page, name: string) {
+  if (process.env.NP_SHOTS) await page.screenshot({ path: `${process.env.NP_SHOTS}/${name}.png`, fullPage: true });
+}
+
+test("payment link without a merchant redirect: Payment complete is the final screen", async ({ page, mock }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const l = mock.createLink({}, { sessionOpts: { autoSucceed: true } });
+  const s = await payLink(page, mock, l);
+  // As payments does for a link without `success_url`: the checkout's own confirmation URL.
+  expect(s.session.success_url).toBe(`${mock.origin}/l/${l.link.id}/complete`);
+  const navigations: string[] = [];
+  page.on("framenavigated", (f) => {
+    if (f === page.mainFrame()) navigations.push(f.url());
+  });
+  const done = page.getByTestId("succeeded");
+  await expect(done).toContainText("Payment complete");
+  await expect(done).toContainText("Acme GmbH has received your payment.");
+  await expect(done).toContainText("You can close this page.");
+  // Nowhere to return to: no button, no "Returning you…", and the checkout's host is not shown as the merchant's site.
+  await expect(page.getByTestId("continue-merchant")).toHaveCount(0);
+  await expect(page.getByText(/Return to|Returning you/)).toHaveCount(0);
+  await expect(page.locator(".np-checkout__merchant-name")).toHaveText("Acme GmbH");
+  await expect(page.locator(".np-checkout__merchant-sub")).toHaveCount(0);
+  // The redirect used to fire 2.5 s after success and end on "This checkout can't be used".
+  await page.waitForTimeout(5000);
+  expect(navigations).toEqual([]);
+  expect(new URL(page.url()).pathname).toBe(`/c/${s.session.id}`);
+  await expect(done).toBeVisible();
+  await expect(page.getByTestId("blocked")).toHaveCount(0);
+  await a11yBasics(page);
+  await shot(page, "link-no-redirect-complete");
+  // A reload resumes the completed session and stays there too.
+  await page.reload();
+  await expect(page.getByTestId("succeeded")).toContainText("You can close this page.");
+  await expect(page.getByTestId("continue-merchant")).toHaveCount(0);
+  await page.waitForTimeout(3000);
+  expect(new URL(page.url()).pathname).toBe(`/c/${s.session.id}`);
+});
+
+test("a link's confirmation URL opened directly: a calm page that claims nothing, not an error", async ({
+  page,
+  mock,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const l = mock.createLink();
+  // Where sessions opened before the fix were sent: no client secret, only the session id.
+  await page.goto(`${mock.origin}/l/${l.link.id}/complete?session_id=cs_01jbz9k3m4n5p6q7r8s9t0v1w2`);
+  const done = page.getByTestId("link-complete");
+  await expect(done).toBeVisible();
+  await expect(done.getByRole("heading")).toHaveText("You can close this page");
+  await expect(done).toContainText("If you just paid here, the merchant has received your payment.");
+  await expect(done).toContainText("not a receipt");
+  await expect(page.getByTestId("blocked")).toHaveCount(0);
+  // Anyone can open this URL: no "Paid" state, no amount, no merchant, and nothing is read from the API.
+  await expect(page.getByText("Paid", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Payment complete")).toHaveCount(0);
+  await expect(page.getByText(/\$|USDC|Acme/)).toHaveCount(0);
+  expect(mock.calls).toEqual([]);
+  await a11yBasics(page);
+  await shot(page, "link-complete-direct");
+  // Unknown but well-formed link ids get the same page (nothing is looked up); with a trailing slash too.
+  await page.goto(`${mock.origin}/l/plink_01jbz9k3m4n5p6q7r8s9t0v1zz/complete/`);
+  await expect(page.getByTestId("link-complete")).toBeVisible();
+  // A malformed id keeps the error page, and so does /complete under any other route.
+  await page.goto(`${mock.origin}/l/plink_123/complete?session_id=cs_01jbz9k3m4n5p6q7r8s9t0v1w2`);
+  await expect(page.getByTestId("blocked-invalid_link")).toBeVisible();
+  await expect(page.getByTestId("link-complete")).toHaveCount(0);
+  await page.goto(`${mock.origin}/c/cs_01jbz9k3m4n5p6q7r8s9t0v1w2/complete`);
+  await expect(page.getByTestId("blocked-invalid_link")).toBeVisible();
+});
+
+test("payment link with a merchant redirect still returns to the merchant", async ({ page, mock }) => {
+  const l = mock.createLink({}, { successUrl: "https://shop.example/thanks", sessionOpts: { autoSucceed: true } });
+  const s = await payLink(page, mock, l);
+  await expect(page.getByTestId("continue-merchant")).toHaveText("Return to Acme GmbH");
+  await expect(page.getByTestId("continue-merchant")).toHaveAttribute(
+    "href",
+    `https://shop.example/thanks?session_id=${s.session.id}`,
+  );
+  await expect(page.getByTestId("succeeded")).toContainText("Returning you to the merchant…");
+  await expect(page.getByTestId("succeeded")).not.toContainText("You can close this page.");
+  await page.waitForURL(`https://shop.example/thanks?session_id=${s.session.id}`);
 });
 
 test("payment link: inactive, not found, and link_inactive on open", async ({ page, mock }) => {

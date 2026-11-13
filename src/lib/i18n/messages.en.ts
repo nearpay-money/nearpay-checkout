@@ -318,6 +318,7 @@ export const en = {
   "complete.return": "Return to {merchant}",
   "complete.returnUnknown": "Return to the merchant",
   "complete.redirect": "Returning you to the merchant…",
+  "complete.close": "You can close this page.",
 
   "returning.title": "Payment being returned",
   "returning.body": "This payment could not complete. A return to your refund wallet is in progress.",
@@ -342,6 +343,9 @@ export const en = {
   "link.notFoundBody": "Check the link or ask the merchant for a new one.",
   "link.loadFailed": "We couldn't load this payment link.",
   "link.retry": "Try again",
+  "link.doneTitle": "You can close this page",
+  "link.doneBody":
+    "If you just paid here, the merchant has received your payment. This page shows no payment details and is not a receipt.",
 
   "error.generic": "Something went wrong. Please try again.",
   "error.network_error": "Could not reach NearPay. Check your connection and try again.",

@@ -11,7 +11,7 @@ import { installBridge } from "./routes/embed/bridge";
 import { EmbeddedCheckout } from "./routes/embed/EmbeddedCheckout";
 import { DEFAULT_APPEARANCE } from "./routes/embed/protocol";
 import { PaymentLinkCheckout } from "./routes/payment-link/PaymentLinkCheckout";
-import { HostedCheckout, InvalidLink } from "./routes/session/HostedCheckout";
+import { HostedCheckout, InvalidLink, LinkComplete } from "./routes/session/HostedCheckout";
 
 // Hosted invoices load on demand: the checkout's initial bundle stays within budget (§7).
 const InvoicePage = lazy(() => import("./routes/invoice/InvoicePage"));
@@ -36,6 +36,8 @@ function App() {
       );
     case "payment_link":
       return <PaymentLinkCheckout id={route.id} />;
+    case "link_complete":
+      return <LinkComplete />;
     case "invoice":
       return (
         <Suspense fallback={null}>
