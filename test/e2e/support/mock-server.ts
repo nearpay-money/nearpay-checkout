@@ -100,6 +100,11 @@ export interface MockLink {
   sessionError: string | null;
   /** Options for the sessions the link opens. */
   sessionOpts: Partial<Omit<MockSession, "session">>;
+  /**
+   * The link's merchant redirect. Null (the default) is a link without one: as in payments, its
+   * sessions get the checkout's own `<pay origin>/l/<plink>/complete` as `success_url`.
+   */
+  successUrl: string | null;
   sessions: MockSession[];
 }
 
@@ -322,7 +327,7 @@ export class MockNearPay {
       ...over,
     } as MockLink["link"];
     check(PublicPaymentLink, link, "payment link");
-    const l: MockLink = { link, sessionError: null, sessionOpts: {}, sessions: [], ...opts };
+    const l: MockLink = { link, sessionError: null, sessionOpts: {}, successUrl: null, sessions: [], ...opts };
     this.links.set(id, l);
     return l;
   }
@@ -474,6 +479,7 @@ export class MockNearPay {
           amount: l.link.amount as number,
           currency: l.link.currency as string,
           display: { merchant_name_unverified: "Acme (unverified)", description: "Pro plan" },
+          success_url: l.successUrl ?? `${this.origin}/l/${l.link.id}/complete`,
         },
         l.sessionOpts,
       );

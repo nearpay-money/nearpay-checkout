@@ -33,7 +33,12 @@ Design docs live in [`nearpay-brain`](https://github.com/nearpay-money/nearpay-b
 | `/c/:cs_id#<client_secret>` | hosted checkout (never framed) |
 | `/embed/:cs_id#<client_secret>` | embedded checkout, framed by `nearpay-js`; accepts `np:init` only from `allowed_origins` |
 | `/l/:id` | payment link (Stage 2): anonymous link page → `createPaymentLinkSession` → continues as `/c/:id#<client_secret>` |
+| `/l/:id/complete` | confirmation page of a link without a merchant redirect: says only "You can close this page" (no secret in the URL, so no payment state is shown) |
 | `/i/:id#<invoice_secret>` | hosted invoice (Stage 3): invoice, PDF, "Pay invoice" → the checkout flow in place (lazy-loaded chunk); Stage 4: auto-pay setup and management (vault mandate funded from the payer's own NEAR account) |
+
+After a payment the hosted checkout returns to the session's `success_url` (2.5 s delay plus a link). A payment
+link without a merchant redirect has the checkout's own `/l/:id/complete` as `success_url`; the checkout then does
+not redirect and "Payment complete" is the final screen.
 
 The client secret stays in the URL fragment and in memory; it is sent only as `X-NearPay-Client-Secret`.
 The invoice secret likewise, only as `X-NearPay-Invoice-Secret`; a wrong secret, an unknown invoice and a
@@ -52,7 +57,7 @@ Needs Node 22 (`.nvmrc`), pnpm 9 and, for step 4, Google Chrome. No Docker. `.np
    `git clone https://github.com/nearpay-money/nearpay-deploy ../nearpay-deploy && ../nearpay-deploy/scripts/registry.sh start`
    → `curl http://127.0.0.1:4873/-/ping` answers `{}`.
 2. `pnpm install --frozen-lockfile` → ends with `Done in …`, no registry errors.
-3. `pnpm test` (unit tests, including the shared `@nearpay-money/spec` test vectors) → `Test Files  17 passed (17)`, `Tests  236 passed (236)`.
+3. `pnpm test` (unit tests, including the shared `@nearpay-money/spec` test vectors) → `Test Files  17 passed (17)`, `Tests  238 passed (238)`.
 4. The full gate, `pnpm verify` (typecheck, lint, unit tests with the coverage gate, production build, Playwright end-to-end tests against an in-process mock of the payer API and sentinel). The production build refuses to run without pinned sentinel public keys, so on a checkout without a seeded `nearpay-deploy` pin the spec's public test-vector key first:
 
    ```sh
@@ -60,7 +65,7 @@ Needs Node 22 (`.nvmrc`), pnpm 9 and, for step 4, Google Chrome. No Docker. `.np
    pnpm verify
    ```
 
-   → exits 0; the Playwright list ends with `87 passed` and `36 skipped` (about 3 minutes). The browser is the system Chrome at `/usr/bin/google-chrome`; set `NP_CHROME` to another path if needed. Without `VITE_SENTINEL_KEYS` (or `NP_SENTINEL_KEYS_FILE`) the build step stops with `no pinned sentinel keys`, which is the intended behaviour.
+   → exits 0; the Playwright list ends with `90 passed` and `36 skipped` (about 3 minutes). The browser is the system Chrome at `/usr/bin/google-chrome`; set `NP_CHROME` to another path if needed. Without `VITE_SENTINEL_KEYS` (or `NP_SENTINEL_KEYS_FILE`) the build step stops with `no pinned sentinel keys`, which is the intended behaviour.
 
 To pay through this app for real, follow the walkthrough in the [entry repo](https://github.com/nearpay-money/nearpay).
 
@@ -112,6 +117,11 @@ token logos; light pay side by default (dark or auto only when a merchant asks);
 `.omft.near`, `.omdep.near` and `1cs_v1:` shapes. Auto-pay on hosted invoices needs the subscription vault,
 which is not deployed on mainnet yet (planned account `v1.nearpay-money.near`); test mode uses the sandbox's
 simulated vault.
+
+Payment links without a merchant redirect end on "Payment complete" (no redirect to the checkout's own
+`/l/:id/complete`, which is now a page for sessions opened earlier). Initial JS 182,269 bytes gzipped (Vite prints
+182.27 kB; 178.0 KB at 1,024 bytes, budget 180 KB), 730 bytes less than before: the hosted invoice copy moved into
+the lazy invoice chunk (31.7 kB).
 
 Step 4.3 (spec 0.4.0):
 Solana wallets through the Wallet Standard (SOL `System.Transfer`, SPL `CreateIdempotent` +

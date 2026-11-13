@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { contentSecurityPolicy, parseSentinelKeys, resolveConfig, resolveSentinelKeys } from "../../build/config";
-import { parseRoute, safeHttpUrl, successRedirect } from "../../src/app/route";
+import { isOwnConfirmation, parseRoute, safeHttpUrl, successRedirect } from "../../src/app/route";
 import { payableOptions } from "../../src/features/asset-picker/options";
 import { countdown, qrPayload } from "../../src/features/deposit-instructions/qr";
 import { validateRefundAddress } from "../../src/features/refund-address/validate";
@@ -181,6 +181,51 @@ describe("routes", () => {
     expect(safeHttpUrl("data:text/html,x")).toBeNull();
     expect(safeHttpUrl("::")).toBeNull();
     expect(safeHttpUrl(null)).toBeNull();
+  });
+
+  const plink = "plink_01jbz9k3m4n5p6q7r8s9t0v1w2";
+  it("parses a link's confirmation page; nothing else takes /complete", () => {
+    expect(parseRoute(`/l/${plink}/complete`, "")).toEqual({ kind: "link_complete" });
+    expect(parseRoute(`/l/${plink}/complete/`, "")).toEqual({ kind: "link_complete" });
+    // The query (`?session_id=`) is not part of the pathname; a fragment is ignored.
+    expect(parseRoute(`/l/${plink}/complete`, `#${secret}`)).toEqual({ kind: "link_complete" });
+    // A malformed id keeps the error page, as `/l/<bad id>` does.
+    expect(parseRoute("/l/plink_1/complete", "")).toEqual({ kind: "not_found" });
+    expect(parseRoute("/l/cs_01jbz9k3m4n5p6q7r8s9t0v1w2/complete", "")).toEqual({ kind: "not_found" });
+    for (const path of [
+      `/l/${plink}/completed`,
+      `/l/${plink}/complete/x`,
+      `/l/${plink}/Complete`,
+      `/l/${plink}//complete`,
+      `/l/${plink}/other`,
+      `/l/complete`,
+      `/c/${id}/complete`,
+      `/embed/${id}/complete`,
+      "/i/in_01jbz9k3m4n5p6q7r8s9t0v1w2/complete",
+    ]) {
+      expect(parseRoute(path, `#${secret}`), path).toEqual({ kind: "not_found" });
+    }
+  });
+  it("does not redirect to the checkout's own link confirmation page (same origin, exact path)", () => {
+    const pay = "https://pay.nearpay.money";
+    expect(isOwnConfirmation(`${pay}/l/${plink}/complete`, pay)).toBe(true);
+    expect(isOwnConfirmation(`${pay}/l/${plink}/complete?session_id=${id}`, pay)).toBe(true);
+    expect(isOwnConfirmation(`http://127.0.0.1:4173/l/${plink}/complete`, "http://127.0.0.1:4173")).toBe(true);
+    // A merchant redirect is always followed: another host, scheme or port, or any other path here.
+    expect(isOwnConfirmation("https://shop.example/thanks", pay)).toBe(false);
+    expect(isOwnConfirmation(`https://shop.example/l/${plink}/complete`, pay)).toBe(false);
+    expect(isOwnConfirmation(`https://pay.nearpay.money.evil.example/l/${plink}/complete`, pay)).toBe(false);
+    expect(isOwnConfirmation(`http://pay.nearpay.money/l/${plink}/complete`, pay)).toBe(false);
+    expect(isOwnConfirmation(`${pay}:8443/l/${plink}/complete`, pay)).toBe(false);
+    expect(isOwnConfirmation(`${pay}/l/${plink}`, pay)).toBe(false);
+    expect(isOwnConfirmation(`${pay}/l/plink_1/complete`, pay)).toBe(false);
+    expect(isOwnConfirmation(`${pay}/l/${plink}/complete/more`, pay)).toBe(false);
+    expect(isOwnConfirmation(`${pay}/c/${id}/complete`, pay)).toBe(false);
+    expect(isOwnConfirmation(`${pay}/i/in_01jbz9k3m4n5p6q7r8s9t0v1w2`, pay)).toBe(false);
+    expect(isOwnConfirmation("javascript:alert(1)", pay)).toBe(false);
+    expect(isOwnConfirmation("not a url", pay)).toBe(false);
+    // The redirect that is still made for a merchant URL is unchanged.
+    expect(successRedirect("https://shop.example/thanks", id)).toBe(`https://shop.example/thanks?session_id=${id}`);
   });
 });
 
