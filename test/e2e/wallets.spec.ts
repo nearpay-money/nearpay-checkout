@@ -179,25 +179,14 @@ test("EVM Intents balance (live): ERC-191 personal_sign from the eth-implicit ac
 
 test("a tampered Intents requirement is refused before any signature is requested", async ({ page, mock }) => {
   await injectNearWallet(page);
+  // Stubbed like the other NEAR tests: without it the picker reads payer.near's real balances from a public RPC
+  // whenever the machine has network access, finds none, and hides the token this test picks.
+  await stubNearRpc(page);
   const s = mock.create({ livemode: true }, { sentinel: "rogue_key" });
   await page.goto(mock.url(s));
   await page.getByTestId("path-wallet").click();
   await page.getByTestId("near-connect").click();
-  const picked = choose(page, "intents_transfer", USDC_NEAR).then(
-    () => true,
-    () => false,
-  );
-  const timer = new Promise<boolean>((r) => setTimeout(() => r(false), 12_000));
-  if (!(await Promise.race([picked, timer]))) {
-    console.log("DIAG url=", page.url());
-    console.log("DIAG body=", (await page.locator("body").innerText()).slice(0, 1500).replace(/\n+/g, " | "));
-    console.log(
-      "DIAG testids=",
-      await page.evaluate(() =>
-        [...document.querySelectorAll("[data-testid]")].map((n) => n.getAttribute("data-testid")).join(","),
-      ),
-    );
-  }
+  await choose(page, "intents_transfer", USDC_NEAR);
   await expect(page.getByTestId("verify-failed")).toBeVisible();
   await expect(page.getByTestId("wallet-send")).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __nearCalls: unknown[] }).__nearCalls.length)).toBe(0);
