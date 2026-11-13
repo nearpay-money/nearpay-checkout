@@ -18,9 +18,13 @@ test("embedded on an allowed origin: ready, resize, appearance, complete", async
   const frame = page.frameLocator("#np");
   await expect(frame.getByTestId("choose-path")).toBeVisible();
   await expect.poll(async () => (await messages(page)).map((m) => m.type)).toContain("np:ready");
-  const first = await messages(page);
-  expect(first[0]).toEqual({ type: "np:ready", v: 1 });
-  expect(first.some((m) => m.type === "np:resize" && typeof m.height === "number" && m.height > 100)).toBe(true);
+  expect((await messages(page))[0]).toEqual({ type: "np:ready", v: 1 });
+  // The first resize follows the ready message after a layout pass: wait for it instead of reading once.
+  await expect
+    .poll(async () =>
+      (await messages(page)).some((m) => m.type === "np:resize" && typeof m.height === "number" && m.height > 100),
+    )
+    .toBe(true);
   // Merchant appearance through the ui applyAppearance (CSSOM custom properties, accent kept WCAG AA).
   const look = await page.frames()[1]?.evaluate(() => ({
     theme: document.documentElement.getAttribute("data-theme"),

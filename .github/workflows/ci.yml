@@ -14,6 +14,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      # Without the repository variable NP_REGISTRY_URL the job starts the local package registry on the runner
+      # (127.0.0.1:4873, where .npmrc points): Verdaccio seeded with the exact tarballs the lockfile pins
+      # (nearpay-deploy: scripts/registry.sh, registry-seed/). It needs Node.js, so it runs after setup-node.
+      - name: Start the local package registry
+        if: ${{ vars.NP_REGISTRY_URL == '' }}
+        uses: nearpay-money/nearpay-deploy/.github/actions/registry@main
       # @nearpay-money/* come from a registry: the local Verdaccio in development, GitHub Packages once
       # remotes exist (repository variable NP_REGISTRY_URL + secret NP_REGISTRY_TOKEN).
       - name: Point the NearPay scope at the CI registry
@@ -29,8 +35,17 @@ jobs:
             echo "${host}:_authToken=${NP_REGISTRY_TOKEN}"
           } > .npmrc
       - run: pnpm install --frozen-lockfile
-      # The production build pins the sentinel public keys of the target environment.
+      # The build pins sentinel public keys and fails without them. A production build pins the keys of its
+      # environment (repository variable NP_SENTINEL_KEYS). Without the variable CI pins the public test-vector key
+      # from @nearpay-money/spec, the key the mock API of the e2e tests signs with.
+      - name: Pin the sentinel keys for this build
+        env:
+          NP_SENTINEL_KEYS: ${{ vars.NP_SENTINEL_KEYS }}
+        run: |
+          if [ -z "$NP_SENTINEL_KEYS" ]; then
+            NP_SENTINEL_KEYS="$(node -e 'const k=require("@nearpay-money/spec/test-vectors/sentinel-attestation.json").key;console.log(JSON.stringify([{kid:k.kid,public_key:k.public_key_base64url}]))')"
+          fi
+          echo "VITE_SENTINEL_KEYS=$NP_SENTINEL_KEYS" >> "$GITHUB_ENV"
       - run: pnpm verify
         env:
-          VITE_SENTINEL_KEYS: ${{ vars.NP_SENTINEL_KEYS }}
           NP_CHROME: /usr/bin/google-chrome
